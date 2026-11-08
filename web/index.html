@@ -127,6 +127,10 @@
   .switch.on::after { transform: translateX(22px); }
   .chips-block { padding: 10px 0 12px; border-bottom: 1px solid var(--border); }
   .chips-block > label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .selection-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .selection-head .t-title { font-size: 14px; }
+  .voice-inline { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .voice-inline > span { font-size: 12px; color: var(--muted); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
   .chip {
     display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600;
@@ -201,23 +205,21 @@
           <div><div class="t-title" data-i18n="clipTitle">🎥 5-second video</div><div class="t-sub" data-i18n="clipSub">Sent after the photo</div></div>
           <button class="switch" id="swClip" role="switch" aria-label="Video"></button>
         </div>
-        <div class="chips-block">
-          <label data-i18n="tgObjects">Objects for Telegram alerts</label>
-          <div class="chips" id="tgChips"></div>
-          <select id="tgAdd"></select>
-        </div>
       </div>
 
-      <div id="voiceBlock">
-        <div class="toggle-row">
-          <div><div class="t-title" data-i18n="voiceTitle">🔊 Voice alert</div><div class="t-sub" data-i18n="voiceSub">The computer speaks out loud</div></div>
-          <button class="switch" id="swVoice" role="switch" aria-label="Voice"></button>
+      <div class="chips-block">
+        <div class="selection-head">
+          <div>
+            <div class="t-title" data-i18n="detectionObjects">Detection &amp; voice objects</div>
+            <div class="t-sub" data-i18n="detectionSub">Selected objects are automatically added to voice</div>
+          </div>
+          <div class="voice-inline" id="voiceBlock">
+            <span data-i18n="voiceShort">🔊 Voice</span>
+            <button class="switch" id="swVoice" role="switch" aria-label="Voice"></button>
+          </div>
         </div>
-        <div class="chips-block">
-          <label data-i18n="voiceObjects">Objects for voice alerts</label>
-          <div class="chips" id="voiceChips"></div>
-          <select id="voiceAdd"></select>
-        </div>
+        <div class="chips" id="detectionChips"></div>
+        <select id="detectionAdd"></select>
       </div>
 
       <div class="cam-actions">
@@ -264,8 +266,8 @@ const I18N = {
         activity: "Aktiviti terkini", none: "Tiada objek dikesan", resolution: "Resolusi",
         alerts: "Amaran Telegram", on: "Hidup", off: "Mati",
         alertsTitle: "Amaran", tgAlerts: "📲 Amaran Telegram", tgSub: "Foto dihantar ke telefon anda",
-        clipTitle: "🎥 Video 5 saat", clipSub: "Dihantar selepas foto", tgObjects: "Objek untuk amaran Telegram",
-        voiceTitle: "🔊 Amaran suara", voiceSub: "Komputer bercakap dalam Bahasa Melayu", voiceObjects: "Objek untuk amaran suara",
+        clipTitle: "🎥 Video 5 saat", clipSub: "Dihantar selepas foto",
+        detectionObjects: "Objek pengesanan & suara", detectionSub: "Objek dipilih ditambah ke suara secara automatik", voiceShort: "🔊 Suara",
         testVoice: "▶️ Uji suara", sendPhoto: "📸 Hantar foto ke Telegram", addObject: "+ Tambah objek…",
         noObjects: "Tiada objek dipilih", speaking: "🔊 Sedang bercakap…", photoSent: "✅ Foto dihantar ke Telegram",
         sending: "Menghantar…", failed: "❌ Gagal. Cuba lagi.",
@@ -278,8 +280,8 @@ const I18N = {
         activity: "Recent activity", none: "Nothing detected", resolution: "Resolution",
         alerts: "Telegram alerts", on: "On", off: "Off",
         alertsTitle: "Alerts", tgAlerts: "📲 Telegram alerts", tgSub: "Photo sent to your phone",
-        clipTitle: "🎥 5-second video", clipSub: "Sent after the photo", tgObjects: "Objects for Telegram alerts",
-        voiceTitle: "🔊 Voice alert", voiceSub: "The computer says it out loud", voiceObjects: "Objects for voice alerts",
+        clipTitle: "🎥 5-second video", clipSub: "Sent after the photo",
+        detectionObjects: "Detection & voice objects", detectionSub: "Selected objects are automatically added to voice", voiceShort: "🔊 Voice",
         testVoice: "▶️ Test voice", sendPhoto: "📸 Send photo to Telegram", addObject: "+ Add object…",
         noObjects: "No objects chosen", speaking: "🔊 Speaking…", photoSent: "✅ Photo sent to Telegram",
         sending: "Sending…", failed: "❌ Failed. Try again.",
@@ -293,7 +295,7 @@ function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = I18N[lang][el.dataset.i18n]; });
   if (typeof renderCameras === "function" && $("cameraList")) renderCameras();
-  if (typeof renderAlertLabels === "function" && typeof objectList !== "undefined") { try { renderAlertLabels(); } catch (e) {} }
+  if (typeof renderDetectionLabels === "function" && typeof objectList !== "undefined") { try { renderDetectionLabels(); } catch (e) {} }
 }
 
 function setActive(selector, attr, value) {
@@ -399,7 +401,7 @@ $("nextCam").onclick = () => {
 };
 setInterval(loadCameras, 10000);  // refresh previews
 // ---- Alerts panel ----
-let objectList = [], alertLabels = [], voiceLabels = [], alertState = {};
+let objectList = [], detectionLabels = [], alertState = {};
 
 function objName(key) {
   const o = objectList.find((x) => x.key === key);
@@ -407,31 +409,25 @@ function objName(key) {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-function renderChips(chipsId, selectId, labels, field) {
+function renderDetectionLabels() {
   const t = I18N[lang];
-  $(chipsId).innerHTML = labels.length
-    ? labels.map((k) => `<span class="chip">${escapeHtml(objName(k))}<button data-remove="${escapeHtml(k)}" aria-label="remove">×</button></span>`).join("")
+  $("detectionChips").innerHTML = detectionLabels.length
+    ? detectionLabels.map((k) => `<span class="chip">${escapeHtml(objName(k))}<button data-remove="${escapeHtml(k)}" aria-label="remove">×</button></span>`).join("")
     : `<span class="empty">${t.noObjects}</span>`;
-  $(chipsId).querySelectorAll("[data-remove]").forEach((b) => b.onclick = () => {
-    const next = labels.filter((k) => k !== b.dataset.remove);
-    setLabels(field, next);
+  $("detectionChips").querySelectorAll("[data-remove]").forEach((b) => b.onclick = () => {
+    setDetectionLabels(detectionLabels.filter((k) => k !== b.dataset.remove));
   });
-  const options = objectList.filter((o) => !labels.includes(o.key))
+  const options = objectList.filter((o) => !detectionLabels.includes(o.key))
     .map((o) => ({ key: o.key, name: objName(o.key) }))
     .sort((a, b) => a.name.localeCompare(b.name));
-  $(selectId).innerHTML = `<option value="">${t.addObject}</option>` +
+  $("detectionAdd").innerHTML = `<option value="">${t.addObject}</option>` +
     options.map((o) => `<option value="${escapeHtml(o.key)}">${escapeHtml(o.name)}</option>`).join("");
 }
 
-function setLabels(field, next) {
-  if (field === "alert_labels") alertLabels = next; else voiceLabels = next;
-  renderAlertLabels();
-  saveSettings({ [field]: next });
-}
-
-function renderAlertLabels() {
-  renderChips("tgChips", "tgAdd", alertLabels, "alert_labels");
-  renderChips("voiceChips", "voiceAdd", voiceLabels, "voice_labels");
+function setDetectionLabels(next) {
+  detectionLabels = next;
+  renderDetectionLabels();
+  saveSettings({ detection_labels: next });
 }
 
 let lastLabelsKey = "";
@@ -446,11 +442,12 @@ function updateAlertPanel(d) {
   $("swAlerts").classList.toggle("on", !!s.alerts);
   $("swClip").classList.toggle("on", !!s.clip);
   $("swVoice").classList.toggle("on", !!s.voice);
-  const key = JSON.stringify([d.alert_labels, d.voice_labels, lang, objectList.length]);
+  const sharedLabels = d.detection_labels || [...new Set([...d.alert_labels, ...d.voice_labels])].sort();
+  const key = JSON.stringify([sharedLabels, lang, objectList.length]);
   if (key !== lastLabelsKey) {   // only re-render when something changed
     lastLabelsKey = key;
-    alertLabels = d.alert_labels; voiceLabels = d.voice_labels;
-    renderAlertLabels();
+    detectionLabels = sharedLabels;
+    renderDetectionLabels();
   }
 }
 
@@ -464,8 +461,9 @@ function showAlertMsg(text, cls) {
 $("swAlerts").onclick = () => { const on = !alertState.alerts; alertState.alerts = on; $("swAlerts").classList.toggle("on", on); saveSettings({ alerts: on }); };
 $("swClip").onclick = () => { const on = !alertState.clip; alertState.clip = on; $("swClip").classList.toggle("on", on); saveSettings({ clip: on }); };
 $("swVoice").onclick = () => { const on = !alertState.voice; alertState.voice = on; $("swVoice").classList.toggle("on", on); saveSettings({ voice: on }); };
-$("tgAdd").onchange = (e) => { if (e.target.value) setLabels("alert_labels", [...alertLabels, e.target.value]); };
-$("voiceAdd").onchange = (e) => { if (e.target.value) setLabels("voice_labels", [...voiceLabels, e.target.value]); };
+$("detectionAdd").onchange = (e) => {
+  if (e.target.value) setDetectionLabels([...detectionLabels, e.target.value]);
+};
 $("testVoice").onclick = async () => {
   showAlertMsg(I18N[lang].speaking);
   try { await fetch("/api/test-voice", { method: "POST" }); } catch (e) { showAlertMsg(I18N[lang].failed, "bad-msg"); }

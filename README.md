@@ -300,9 +300,8 @@ WEB_PASSWORD="12345"
 | **Objects seen** | Count of each object type right now |
 | **Alerts → 📲 Telegram alerts** | Switch Telegram alerts on/off |
 | **Alerts → 🎥 5-second video** | Switch the 5-second video on/off (off = photo only) |
-| **Alerts → Objects for Telegram alerts** | Choose which objects send a Telegram alert. Tap **×** to remove, **+ Add object…** to add |
-| **Alerts → 🔊 Voice alert** | Switch the voice alert on/off |
-| **Alerts → Objects for voice alerts** | Choose which objects the voice speaks for |
+| **Alerts → Detection & voice objects** | One shared object list for detection alerts and voice. Adding an object automatically adds it to voice; tap **×** to remove it |
+| **Alerts → 🔊 Voice** | Switch spoken alerts on/off using the toggle on the right of the shared object selection |
 | **▶️ Test voice** | Hear a test sentence from the computer |
 | **📸 Send photo to Telegram** | Send the current camera picture to your Telegram now |
 | **Settings → Camera** | Preview picture of every camera found. Tap one to switch. *Dark* = black picture. **🔍 Rescan** = look for cameras again (e.g. after plugging one in or connecting your iPhone) |
@@ -344,7 +343,8 @@ python main.py --alert car,motorcycle
 ```
 
 > 💡 You can also start without `--alert` and pick the objects later in the web page
-> (**Alerts → Objects for Telegram alerts**). Changes made in the web page or through the bot
+> (**Alerts → Detection & voice objects**). Each selected object is also a voice target; use
+> the Voice toggle to turn speaking on or off. Changes made in the web page or through the bot
 > (alerts, voice, objects, camera) last until the program stops; the next start uses the
 > command options again.
 
@@ -394,13 +394,10 @@ python web_app.py --phone --voice "teddy bear"
 
 - It speaks at most once every 10 seconds per object; change with `--voice-cooldown 30`.
 - Voice objects also get the flashing red box.
-- You can also switch the voice on/off and choose its objects in the web page (**Alerts** panel),
-  even if you started without `--voice`.
-- It can be different from the Telegram list, e.g. voice for teddy bear only, Telegram for
-  teddy bear + cow:
-  ```bash
-  python web_app.py --phone --alert "teddy bear,cow" --voice "teddy bear"
-  ```
+- The web page uses one **Detection & voice objects** list. Adding an object automatically makes
+  it available to both Telegram detection alerts and voice.
+- Use the Voice toggle on the right of the object selection to turn speaking on or off without
+  changing the selected objects.
 - On Windows, speech uses an installed system voice. Malay is selected when a `ms-MY` voice is
   installed; otherwise Windows uses its default voice. Turn up the computer's volume 🔈.
 
@@ -459,7 +456,7 @@ Options work with both `web_app.py` and `main.py` unless noted.
 | `--alert LIST` | – | Telegram alert objects, e.g. `"teddy bear,cow"` |
 | `--alert-cooldown S` | `60` | Seconds between alerts for the same object |
 | `--clip-seconds S` | `5` | Video length sent with each alert (`0` = photo only) |
-| `--voice LIST` | – | Speak out loud for these objects, e.g. `"teddy bear"` |
+| `--voice LIST` | – | Add these objects to the shared detection/voice selection and start voice, e.g. `"teddy bear"` |
 | `--voice-cooldown S` | `10` | Seconds before speaking again for the same object |
 | `--lang en\|ms` | `en` | Label language. `ms` = Malay (optional) |
 | `--no-bot` | off | *(web_app.py only)* Don't listen for Telegram commands |

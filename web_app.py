@@ -297,6 +297,10 @@ def create_app(worker: CameraWorker, login: tuple[str, str] | None = None,
         data["settings"] = s = worker.get_settings()
         data["alert_labels"] = sorted(worker.alerter.labels) if worker.alerter else []
         data["voice_labels"] = sorted(worker.voice.labels) if worker.voice else []
+        data["detection_labels"] = sorted(
+            (worker.alerter.labels if worker.alerter else set())
+            | (worker.voice.labels if worker.voice else set())
+        )
         data["telegram"] = worker.alerter is not None
         data["voice_available"] = bool(worker.voice and worker.voice.available)
         return jsonify(data)
@@ -347,10 +351,19 @@ def create_app(worker: CameraWorker, login: tuple[str, str] | None = None,
                 changes["voice"] = bool(body["voice"])
             if "clip" in body:
                 changes["clip"] = bool(body["clip"])
-            if "alert_labels" in body and worker.alerter:
-                worker.alerter.labels = {l for l in body["alert_labels"] if l in worker.detector.labels}
-            if "voice_labels" in body and worker.voice:
-                worker.voice.labels = {l for l in body["voice_labels"] if l in worker.detector.labels}
+            label_values = None
+            if "detection_labels" in body:
+                label_values = body["detection_labels"]
+            elif "alert_labels" in body:
+                label_values = body["alert_labels"]
+            elif "voice_labels" in body:
+                label_values = body["voice_labels"]
+            if label_values is not None:
+                labels = {l for l in label_values if l in worker.detector.labels}
+                if worker.alerter:
+                    worker.alerter.labels = set(labels)
+                if worker.voice:
+                    worker.voice.labels = set(labels)
         except (TypeError, ValueError):
             abort(400)
         return jsonify(worker.update(**changes))
@@ -377,12 +390,12 @@ def main():
     p.add_argument("--height", type=int, default=720)
     p.add_argument("--lang", choices=["en", "ms"], default="en", help="label language: en = English (default), ms = Malay")
     p.add_argument("--text-size", type=float, default=1.0)
-    p.add_argument("--alert", help="send a Telegram alert for these objects, e.g. \"teddy bear,cow\"")
+    p.add_argument("--alert", help="add objects to the shared selection and enable Telegram alerts")
     p.add_argument("--alert-cooldown", type=float, default=60,
                    help="seconds to wait before alerting again for the same object (default 60)")
     p.add_argument("--clip-seconds", type=float, default=5,
                    help="length of the video clip sent with each alert (0 = photo only)")
-    p.add_argument("--voice", help="speak out loud for these objects, e.g. \"teddy bear\"")
+    p.add_argument("--voice", help="add objects to the shared selection and enable voice alerts")
     p.add_argument("--voice-cooldown", type=float, default=10,
                    help="seconds before speaking again for the same object (default 10)")
     p.add_argument("--no-bot", action="store_true", help="do not listen for Telegram commands")
@@ -400,16 +413,17 @@ def main():
     client = TelegramClient.from_env(required=bool(args.alert))
     alert_labels = parse_labels(args.alert, "--alert", detector.labels) if args.alert else set()
     voice_labels = parse_labels(args.voice, "--voice", detector.labels) if args.voice else set()
+    detection_labels = alert_labels | voice_labels
     alerter = None
     if client:
-        alerter = TelegramAlerter(alert_labels, args.alert_cooldown, args.lang,
+        alerter = TelegramAlerter(set(detection_labels), args.alert_cooldown, args.lang,
                                   clip_seconds=args.clip_seconds, client=client)
         if alert_labels:
-            print(f"Telegram alerts on for: {', '.join(sorted(alert_labels))}"
+            print(f"Telegram alerts on for: {', '.join(sorted(detection_labels))}"
                   + (f" (photo + {args.clip_seconds:g}s video)" if args.clip_seconds > 0 else " (photo)"))
-    voice = VoiceAnnouncer(voice_labels, args.voice_cooldown, args.lang)
+    voice = VoiceAnnouncer(set(detection_labels), args.voice_cooldown, args.lang)
     if voice_labels:
-        print(f"Voice on for: {', '.join(sorted(voice_labels))}")
+        print(f"Voice on for: {', '.join(sorted(detection_labels))}")
 
     # Login details come from .env so they are not written in the code.
     env = load_env()
