@@ -8,9 +8,11 @@ import time
 
 import cv2
 
+from cam_detection.camera import open_camera
+
 os.makedirs("camera_check", exist_ok=True)
 for index in range(4):
-    cap = cv2.VideoCapture(index)
+    cap = open_camera(index)
     if not cap.isOpened():
         continue
     for label, size in [("default", None), ("1280x720", (1280, 720)), ("1920x1080", (1920, 1080))]:

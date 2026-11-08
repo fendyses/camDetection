@@ -1,3 +1,6 @@
 ultralytics>=8.3
 opencv-python>=4.10
 flask>=3.0
+requests>=2.32
+numpy>=1.26
+pillow>=10.0

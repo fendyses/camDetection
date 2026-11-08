@@ -13,11 +13,11 @@ Built with Python, [OpenCV](https://opencv.org/) and [YOLO (Ultralytics)](https:
 ## ✨ Features
 
 - 🎥 **Live detection** of 80 common objects, or **600 objects** with the larger model
-- 🌐 **Web dashboard**: watch the camera from a browser on your Mac or phone, with live counts,
+- 🌐 **Web dashboard**: watch the camera from a browser on your computer or phone, with live counts,
   recent activity, and settings you can change while it runs
 - 📲 **Telegram alerts** with a photo **and a 5-second video** when chosen objects appear
 - 🤖 **Telegram bot commands**: `/photo`, `/status`, `/on`, `/off`, `/camera`, `/voice`, `/help`
-- 🔊 **Voice alert**: the Mac says *"Alert! Teddy bear detected."* out loud
+- 🔊 **Voice alert**: the computer says *"Alert! Teddy bear detected."* out loud
 - 🎛️ **Alerts panel** in the web page: switch Telegram / video / voice on and off and choose
   the alert objects while it runs
 - 🔐 **Login page** so only you can open the camera page
@@ -29,7 +29,7 @@ Built with Python, [OpenCV](https://opencv.org/) and [YOLO (Ultralytics)](https:
 
 ## 📋 Requirements
 
-- macOS (also works on Windows/Linux with small differences; the voice alert is macOS only)
+- macOS or 64-bit Windows 10/11
 - Python 3.10 or newer
 - A camera: built-in webcam, USB webcam, iPhone (Continuity Camera) or an IP/CCTV stream
 - Internet on first run (to download the detection model) and for Telegram
@@ -38,7 +38,9 @@ Built with Python, [OpenCV](https://opencv.org/) and [YOLO (Ultralytics)](https:
 
 ## 🛠️ Installation (one time)
 
-Open a terminal in the project folder and run:
+### macOS
+
+Open Terminal in the project folder and run:
 
 ```bash
 cd /Applications/Sites/camDetection
@@ -58,6 +60,27 @@ pip install -r requirements.txt
 > Type only the command inside (e.g. `python web_app.py`) and press **Enter**. Don't type
 > the ```` ``` ```` marks.
 
+### Windows 10/11
+
+Install 64-bit Python 3.12, open **PowerShell** in the project folder, and run:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+If PowerShell blocks `Activate.ps1`, either run the app directly with
+`.\.venv\Scripts\python.exe web_app.py`, or allow locally-created scripts for your account:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Do not copy the `.venv` folder from a Mac. Virtual environments are specific to the computer
+and operating system that created them.
+
 ---
 
 ## 🚀 Start the server
@@ -71,19 +94,28 @@ listens for Telegram commands. It only works **while the terminal stays open**.
 cd /Applications/Sites/camDetection
 ```
 
+On Windows, open the folder in PowerShell instead, for example:
+
+```powershell
+cd C:\Projects\camDetection
+```
+
 ### 2. Start it (pick one)
 
 | What you want | Command |
 |---|---|
-| Web page on this Mac only | `.venv/bin/python web_app.py` |
-| Web page on Mac **and phone** (same Wi-Fi) | `.venv/bin/python web_app.py --phone` |
-| ⭐ **Everything on**: phone, camera 1, Telegram alerts + video, voice | `.venv/bin/python web_app.py --phone --camera 1 --alert "teddy bear,cow" --voice "teddy bear"` |
+| Web page on this computer only | `python web_app.py` |
+| Web page on computer **and phone** (same Wi-Fi) | `python web_app.py --phone` |
+| ⭐ **Everything on**: phone, camera 1, Telegram alerts + video, voice | `python web_app.py --phone --camera 1 --alert "teddy bear,cow" --voice "teddy bear"` |
 | Faster on Apple Silicon (Mac GPU) | add `--device mps` to any command above |
 | Different port (if 8000 is taken) | add `--port 8001` |
 
-> Using `.venv/bin/python` always works, even if the environment isn't activated.
-> If you ran `source .venv/bin/activate` first (you see `(.venv)`), you can type just
-> `python web_app.py ...` instead.
+The commands above assume `.venv` is activated. On macOS, `.venv/bin/python web_app.py`
+also works without activation.
+
+On Windows, activate the environment and replace `.venv/bin/python` with `python`, or run
+`.\.venv\Scripts\python.exe web_app.py`. Use `--device cuda` instead of `--device mps` when
+PyTorch has been installed for a supported NVIDIA GPU.
 
 ### 3. Wait until it's ready (about 30–40 seconds)
 
@@ -105,7 +137,7 @@ Telegram is set up in `.env`.)
 
 ### 4. Open it
 
-- **On the Mac:** **http://localhost:8000**
+- **On this computer:** **http://localhost:8000**
 - **On your phone:** the `Phone (same Wi-Fi)` address printed in the terminal
 - Log in with the username / password from `.env` (see [Login](#-login))
 - **Telegram:** send `/help` to your bot
@@ -127,6 +159,13 @@ pkill -f web_app.py                  # stops every running copy of the server
 Run only **one** copy at a time: two copies fight over the camera and the Telegram bot,
 and the second one fails with `Address already in use`.
 
+On Windows, find and stop a process using port 8000 with:
+
+```powershell
+netstat -ano | findstr :8000
+taskkill /PID <PID_FROM_THE_PREVIOUS_COMMAND> /F
+```
+
 ### Keep it running while you're away
 
 The Mac must stay on and awake for the page, alerts and bot to work. In a **second** terminal:
@@ -137,9 +176,12 @@ caffeinate -d
 
 (Press `Ctrl+C` there to let the Mac sleep again.)
 
+On Windows, keep the computer awake using **Settings → System → Power & battery → Screen and
+sleep** while the server is needed.
+
 ### Desktop-window version (no web page)
 
-`main.py` shows the camera in a window on the Mac instead of a web page. It supports
+`main.py` shows the camera in a desktop window instead of a web page. It supports
 `--alert` and `--voice`, but **not** the web page, login or Telegram bot commands.
 
 ```bash
@@ -155,6 +197,10 @@ caffeinate -d
 > connections** for your terminal / VS Code / Python. Click **Allow**. If you missed the camera
 > one, go to **System Settings → Privacy & Security → Camera**, enable your terminal/VS Code,
 > and restart it.
+>
+> **First run on Windows:** go to **Settings → Privacy & security → Camera** and enable
+> camera access plus **Let desktop apps access your camera**. When using `--phone`, allow
+> Python through Windows Defender Firewall on **Private networks**.
 
 ---
 
@@ -164,19 +210,19 @@ caffeinate -d
 
 1. **File → Open Folder…** and choose the `camDetection` folder.
 2. Install the **Python** extension (by Microsoft) if asked.
-3. Make sure the bottom-right corner shows `.venv`. If not: `Cmd+Shift+P` →
-   **Python: Select Interpreter** → `./.venv/bin/python`.
+3. Make sure the bottom-right corner shows `.venv`. If not, open **Python: Select
+   Interpreter** (`Cmd+Shift+P` on macOS or `Ctrl+Shift+P` on Windows) and choose the
+   interpreter inside `.venv`.
 
 ### Start it from the VS Code terminal (step by step)
 
 **1. Open the terminal:** press `` Ctrl+` `` (the key below `Esc`), or use the menu
 **Terminal → New Terminal**.
 
-**2. Type these two lines,** pressing **Enter** after each:
+**2. Start the app:**
 
 ```bash
-cd /Applications/Sites/camDetection
-.venv/bin/python web_app.py --phone --camera 1 --alert "teddy bear,cow" --voice "teddy bear"
+python web_app.py --phone --camera 1 --alert "teddy bear,cow" --voice "teddy bear"
 ```
 
 **3. Wait about 30–40 seconds** until you see:
@@ -257,7 +303,7 @@ WEB_PASSWORD="12345"
 | **Alerts → Objects for Telegram alerts** | Choose which objects send a Telegram alert. Tap **×** to remove, **+ Add object…** to add |
 | **Alerts → 🔊 Voice alert** | Switch the voice alert on/off |
 | **Alerts → Objects for voice alerts** | Choose which objects the voice speaks for |
-| **▶️ Test voice** | Hear a test sentence from the Mac |
+| **▶️ Test voice** | Hear a test sentence from the computer |
 | **📸 Send photo to Telegram** | Send the current camera picture to your Telegram now |
 | **Settings → Camera** | Preview picture of every camera found. Tap one to switch. *Dark* = black picture. **🔍 Rescan** = look for cameras again (e.g. after plugging one in or connecting your iPhone) |
 | **Settings → Minimum confidence** | Lower = detects more (but more mistakes); higher = stricter |
@@ -311,7 +357,7 @@ What happens when an alert object is seen:
 - ⏱️ **Cooldown:** at most one alert per object type every 60 seconds. Change it with
   `--alert-cooldown 10` (10 s) or `--alert-cooldown 300` (5 min).
 
-> The Mac must be on with the program running (and connected to the internet) to send alerts.
+> The computer must be on with the program running (and connected to the internet) to send alerts.
 
 ### 3. Control it from Telegram (bot commands)
 
@@ -337,7 +383,8 @@ While `web_app.py` is running, send these to your bot (they also appear in the b
 
 ## 🔊 Voice alert
 
-The Mac speaks out loud (macOS voice **Samantha**) when chosen objects appear:
+The computer speaks out loud using macOS `say` or Windows' built-in speech engine when chosen
+objects appear:
 
 ```bash
 python web_app.py --phone --voice "teddy bear"
@@ -354,7 +401,8 @@ python web_app.py --phone --voice "teddy bear"
   ```bash
   python web_app.py --phone --alert "teddy bear,cow" --voice "teddy bear"
   ```
-- macOS only. Turn up the Mac's volume 🔈.
+- On Windows, speech uses an installed system voice. Malay is selected when a `ms-MY` voice is
+  installed; otherwise Windows uses its default voice. Turn up the computer's volume 🔈.
 
 ---
 
@@ -421,6 +469,10 @@ Options work with both `web_app.py` and `main.py` unless noted.
 
 See all options any time with `python web_app.py --help` or `python main.py --help`.
 
+For an NVIDIA GPU on Windows, install the matching CUDA-enabled PyTorch build from the official
+PyTorch installer, then use `--device cuda`. Otherwise omit `--device` to use automatic selection,
+or use `--device cpu`. `mps` is only for Apple Silicon Macs.
+
 ---
 
 ## 🐄 Objects the default model can detect (80)
@@ -448,18 +500,18 @@ For more objects (goat, chicken, helmet…), use a 600-object model (see above).
 
 | Problem | Solution |
 |---|---|
-| **`command not found: python`** | Use `.venv/bin/python web_app.py`, or run `source .venv/bin/activate` first |
+| **Python command not found** | macOS: use `.venv/bin/python` or activate with `source .venv/bin/activate`. Windows: install Python with the launcher enabled, then use `py`, or run `.\.venv\Scripts\python.exe` |
 | **Page doesn't open right after starting** | Startup takes about 30–40 seconds. Wait for `Open: http://localhost:8000` in the terminal, then refresh |
 | **Black picture** | That camera isn't giving an image (e.g. iPhone locked, or covered). Tap another camera under **Settings → Camera**, press **🔄 Switch camera**, or send `/camera 1` to the bot |
 | **Picture looks zoomed in / wrong camera** | Your iPhone may be connected as a Continuity Camera. Try `--camera 1`, or turn off **Center Stage** in Control Center → Video Effects. Run `python check_camera.py` to save a test picture from every camera into `camera_check/` |
-| **"Could not open camera"** | Allow camera access in **System Settings → Privacy & Security → Camera** for your terminal/VS Code, then restart it |
+| **"Could not open camera"** | macOS: allow terminal/VS Code under **System Settings → Privacy & Security → Camera**. Windows: enable camera access and **Let desktop apps access your camera**, then close other apps using the camera |
 | **Object not detected** | Better lighting, show the whole object, and lower the confidence (`--conf 0.35` or the web slider). For objects outside the 80, use a 600-object model |
 | **"Unknown object for --alert"** | The loaded model doesn't know that name. Check the **+ Add object…** list in the web page, or try a 600-object model |
-| **Slow / low FPS** | Add `--device mps`, or use a smaller model (`yolo11n.pt` or `yolov8n-oiv7.pt`) |
-| **Phone can't open the page** | Run with `--phone`, use the same Wi-Fi, allow incoming connections for Python when macOS asks. Some campus/public Wi-Fi blocks this; use your phone's hotspot instead |
-| **"Address already in use"** | It is already running somewhere. Stop it with `Ctrl+C` in that terminal, or run `pkill -f web_app.py`, or use `--port 8001` |
+| **Slow / low FPS** | Apple Silicon: add `--device mps`. Windows with a configured NVIDIA/PyTorch CUDA installation: add `--device cuda`. Otherwise use a smaller model (`yolo11n.pt` or `yolov8n-oiv7.pt`) |
+| **Phone can't open the page** | Run with `--phone`, use the same Wi-Fi, and allow Python through the macOS or Windows firewall. Some campus/public Wi-Fi blocks this; use your phone's hotspot instead |
+| **"Address already in use"** | It is already running somewhere. Stop it with `Ctrl+C`, use `--port 8001`, or use `pkill -f web_app.py` on macOS / `netstat -ano \| findstr :8000` then `taskkill /PID … /F` on Windows |
 | **Bot doesn't reply to commands** | Most often the server is **not running**: the bot only replies while `web_app.py` runs. Start it (see [Start it from the VS Code terminal](#start-it-from-the-vs-code-terminal-step-by-step)), wait for `Telegram bot commands are on`, then send the command **again** (commands sent while it was off are skipped). Also make sure only **one** copy is running, and that it's `web_app.py`, not `main.py` |
-| **No voice** | Turn up the volume. Check the **🔊 Voice alert** switch is on and the object is in **Objects for voice alerts** (web page). Press **▶️ Test voice**, or test in the terminal with `say "Hello"` |
+| **No voice** | Turn up the volume, enable **🔊 Voice alert**, add an object, and press **▶️ Test voice**. macOS requires `say`; Windows requires Windows PowerShell and an installed system speech voice |
 | **Forgot the password** | Open `.env` and look at `WEB_USERNAME` / `WEB_PASSWORD` |
 | **No Telegram alert** | Run `python setup_telegram.py` again to test. Check the object name in `--alert` and the **Telegram alerts** switch on the web page. Remember the 60 s cooldown |
 
@@ -475,10 +527,11 @@ camDetection/
 ├── check_camera.py             # Saves a test picture from every camera
 ├── cam_detection/
 │   ├── detector.py             # YOLO detection + drawing boxes/labels
+│   ├── camera.py               # Cross-platform OpenCV camera backends
 │   ├── translations.py         # Optional Malay object names (--lang ms)
 │   ├── telegram_alert.py       # Telegram photo + video alerts, cooldown
 │   ├── telegram_bot.py         # Telegram commands (/photo, /status, /help…)
-│   └── voice.py                # Voice alert (macOS "say")
+│   └── voice.py                # Voice alert (macOS + Windows)
 ├── web/index.html              # The web dashboard page
 ├── web/login.html              # The login page
 ├── .vscode/                    # VS Code run configurations

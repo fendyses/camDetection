@@ -1,7 +1,9 @@
 """Thin wrapper around a YOLO model for per-frame object detection."""
+import os
 import time
 import zlib
 from dataclasses import dataclass
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -48,7 +50,8 @@ _FONT_CANDIDATES = [
     ("/System/Library/Fonts/Helvetica.ttc", 1),
     ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 0),
     ("DejaVuSans-Bold.ttf", 0),  # Linux
-    ("arialbd.ttf", 0),  # Windows
+    (str(Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "arialbd.ttf"), 0),
+    ("arialbd.ttf", 0),  # Windows fallback
 ]
 _font_cache: dict[int, ImageFont.FreeTypeFont] = {}
 

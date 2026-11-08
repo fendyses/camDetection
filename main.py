@@ -15,6 +15,7 @@ from datetime import datetime
 
 import cv2
 
+from cam_detection.camera import open_camera
 from cam_detection.detector import ObjectDetector, draw_detections
 from cam_detection.telegram_alert import TelegramAlerter, parse_labels
 from cam_detection.voice import VoiceAnnouncer
@@ -62,12 +63,12 @@ def main():
                                args.voice_cooldown, args.lang)
         print(f"Voice on for: {', '.join(sorted(voice.labels))}")
 
-    cap = cv2.VideoCapture(source)
+    cap = open_camera(source)
     if not cap.isOpened():
         raise SystemExit(
             f"Could not open camera/source: {source}\n"
-            "On macOS, allow camera access for your terminal in "
-            "System Settings > Privacy & Security > Camera."
+            "Check that camera access is allowed for your terminal or Python in your "
+            "operating system's privacy settings."
         )
 
     if args.width and args.height:

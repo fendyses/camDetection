@@ -1,11 +1,22 @@
-"""Speak out loud when chosen objects are detected. macOS only."""
+"""Speak out loud when chosen objects are detected on macOS or Windows."""
 import shutil
 import subprocess
+import sys
 import time
 
 from cam_detection.translations import translate
 
-VOICES = {"en": "Samantha", "ms": "Amira"}  # built-in macOS voices
+MACOS_VOICES = {"en": "Samantha", "ms": "Amira"}
+WINDOWS_CULTURES = {"en": "en-US", "ms": "ms-MY"}
+WINDOWS_SPEECH_SCRIPT = (
+    "Add-Type -AssemblyName System.Speech; "
+    "$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+    "$culture = $args[0]; $text = $args[1]; "
+    "$voice = $speaker.GetInstalledVoices() | "
+    "Where-Object { $_.VoiceInfo.Culture.Name -eq $culture } | Select-Object -First 1; "
+    "if ($voice) { $speaker.SelectVoice($voice.VoiceInfo.Name) }; "
+    "$speaker.Speak($text)"
+)
 
 
 class VoiceAnnouncer:
@@ -13,10 +24,18 @@ class VoiceAnnouncer:
         self.labels = labels
         self.cooldown = cooldown
         self.lang = lang
-        self.available = shutil.which("say") is not None
+        self._engine = None
+        self._executable = None
+        if sys.platform == "darwin":
+            self._engine = "macos"
+            self._executable = shutil.which("say")
+        elif sys.platform == "win32":
+            self._engine = "windows"
+            self._executable = shutil.which("powershell.exe") or shutil.which("powershell")
+        self.available = self._executable is not None
         self.enabled = True
         if not self.available:
-            print("[Suara] The 'say' command is not available (macOS only) - voice is off.")
+            print("[Suara] No supported speech engine was found - voice is off.")
         self._last_spoken: dict[str, float] = {}
         self._process: subprocess.Popen | None = None
 
@@ -55,8 +74,17 @@ class VoiceAnnouncer:
     def say(self, text: str) -> None:
         if not self.available:
             return
-        voice = VOICES.get(self.lang, VOICES["en"])
         try:
-            self._process = subprocess.Popen(["say", "-v", voice, text])
+            if self._engine == "macos":
+                voice = MACOS_VOICES.get(self.lang, MACOS_VOICES["en"])
+                command = [self._executable, "-v", voice, text]
+            else:
+                culture = WINDOWS_CULTURES.get(self.lang, WINDOWS_CULTURES["en"])
+                command = [self._executable, "-NoProfile", "-NonInteractive", "-Command",
+                           WINDOWS_SPEECH_SCRIPT, culture, text]
+            self._process = subprocess.Popen(
+                command,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
         except OSError as exc:
             print(f"[Suara] could not speak: {exc}")

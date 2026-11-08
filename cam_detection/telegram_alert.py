@@ -141,7 +141,12 @@ def make_clip(frames: list[tuple[float, bytes]], max_width: int = 960) -> bytes 
         path = os.path.join(tmp, "klip.mp4")
         writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"avc1"), fps, (w, h))
         if not writer.isOpened():  # fallback codec
+            writer.release()
             writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+        if not writer.isOpened():
+            writer.release()
+            print("[Telegram] video skipped: no compatible MP4 encoder is available")
+            return None
         for _, jpeg in frames:
             img = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
             if img.shape[1] != w or img.shape[0] != h:

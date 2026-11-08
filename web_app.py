@@ -20,6 +20,7 @@ from pathlib import Path
 import cv2
 from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory, session
 
+from cam_detection.camera import open_camera
 from cam_detection.detector import ObjectDetector, draw_detections
 from cam_detection.telegram_alert import (TelegramAlerter, TelegramClient, load_env, parse_labels,
                                           save_env_value)
@@ -80,7 +81,7 @@ class CameraWorker:
     def _open(self, index: int) -> bool:
         if self._cap is not None:
             self._cap.release()
-        self._cap = cv2.VideoCapture(index)
+        self._cap = open_camera(index)
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         self._opened = index
@@ -96,7 +97,7 @@ class CameraWorker:
             self._cap, self._opened = None, None
         found, thumbs, misses = [], {}, 0
         for index in range(MAX_CAMERAS):
-            cap = cv2.VideoCapture(index)
+            cap = open_camera(index)
             if not cap.isOpened():
                 cap.release()
                 misses += 1
