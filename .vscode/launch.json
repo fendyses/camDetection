@@ -1,0 +1,63 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Web (browser)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/web_app.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": []
+    },
+    {
+      "name": "Web (browser + phone on same Wi-Fi)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/web_app.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": [
+        "--phone"
+      ]
+    },
+    {
+      "name": "Web + Telegram + Voice (teddy bear, cow)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/web_app.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": [
+        "--phone",
+        "--camera",
+        "1",
+        "--alert",
+        "teddy bear,cow",
+        "--voice",
+        "teddy bear"
+      ]
+    },
+    {
+      "name": "Camera Detection",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": []
+    },
+    {
+      "name": "Camera Detection (Apple GPU)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": [
+        "--device",
+        "mps"
+      ]
+    }
+  ]
+}

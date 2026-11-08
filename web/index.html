@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>camDetection</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #171b22;
+    --panel-2: #1f2530;
+    --border: #2a313d;
+    --text: #e8ecf2;
+    --muted: #8b95a5;
+    --accent: #4f9cff;
+    --good: #3ecf8e;
+    --bad: #ff5d5d;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .logo {
+    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    background: linear-gradient(135deg, #4f9cff, #a259ff); font-size: 18px;
+  }
+  h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .sub { font-size: 12px; color: var(--muted); }
+  .head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .logout { font-size: 13px; padding: 6px 12px; border-radius: 999px; }
+  .live {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600;
+    padding: 6px 12px; border-radius: 999px; background: var(--panel-2);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 0 rgba(62,207,142,.6); animation: pulse 1.6s infinite; }
+  .live.off .dot { background: var(--bad); animation: none; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(62,207,142,0); } 100% { box-shadow: 0 0 0 0 rgba(62,207,142,0); } }
+
+  main {
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px;
+    padding: 18px 20px; max-width: 1500px; margin: 0 auto;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px; } }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+  .video-wrap { position: relative; overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
+  .video-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .video-wrap .error {
+    position: absolute; inset: 0; display: none; place-items: center; text-align: center;
+    padding: 20px; background: rgba(0,0,0,.75); color: #ffb4b4; font-weight: 600;
+  }
+  .video-wrap.has-error .error { display: grid; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; }
+
+  button, .btn {
+    font: inherit; font-size: 14px; font-weight: 600; color: var(--text); text-decoration: none;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 9px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  }
+  button:hover, .btn:hover { border-color: var(--accent); }
+  button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  main > section, aside { min-width: 0; }
+  aside { display: flex; flex-direction: column; gap: 18px; }
+  .section { padding: 16px; }
+  .section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { background: var(--panel-2); border-radius: 12px; padding: 12px; }
+  .stat .num { font-size: 30px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat .lbl { font-size: 12px; color: var(--muted); }
+
+  .objects { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .obj .row { display: flex; justify-content: space-between; font-size: 15px; font-weight: 600; margin-bottom: 5px; }
+  .bar { height: 6px; border-radius: 99px; background: var(--panel-2); overflow: hidden; }
+  .bar span { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #4f9cff, #a259ff); transition: width .3s; }
+  .empty { color: var(--muted); font-size: 14px; }
+
+  .events { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; font-size: 13px; }
+  .events li { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .events li:last-child { border-bottom: 0; }
+  .events time { color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+  .control { margin-bottom: 14px; }
+  .control:last-child { margin-bottom: 0; }
+  .control label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 7px; }
+  .control label b { color: var(--accent); }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .cams { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  .cam {
+    padding: 0; overflow: hidden; flex-direction: column; align-items: stretch; gap: 0;
+    border-width: 2px; text-align: left;
+  }
+  .cam img, .cam .noimg { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: #000; }
+  .cam .noimg { display: grid; place-items: center; color: var(--muted); font-size: 22px; }
+  .cam .cap { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 7px 9px; font-size: 13px; }
+  .cam.active { background: var(--panel-2); border-color: var(--accent); color: var(--text); }
+  .cam.active .cap::after { content: "●"; color: var(--good); }
+  .badge { font-size: 11px; font-weight: 700; color: #ffcf66; }
+  .cam-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .cam-actions button { font-size: 13px; padding: 7px 11px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .t-title { font-size: 15px; font-weight: 600; }
+  .t-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .switch {
+    position: relative; flex-shrink: 0; width: 52px; height: 30px; padding: 0; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--border); transition: background .2s;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+    background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  .switch.on { background: var(--good); border-color: var(--good); }
+  .switch.on::after { transform: translateX(22px); }
+  .chips-block { padding: 10px 0 12px; border-bottom: 1px solid var(--border); }
+  .chips-block > label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600;
+    background: rgba(255,35,35,.15); border: 1px solid rgba(255,35,35,.45); color: #ffc4c4;
+    border-radius: 999px; padding: 4px 4px 4px 11px;
+  }
+  .chip button { border: 0; background: transparent; padding: 0 6px; font-size: 15px; color: inherit; line-height: 1; }
+  .chip button:hover { color: #fff; }
+  .chips .empty { font-size: 13px; }
+  select {
+    width: 100%; font: inherit; font-size: 14px; color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px;
+  }
+  .ok-msg { color: var(--good); }
+  .bad-msg { color: var(--bad); }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 10px 0 24px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">👁️</div>
+    <div>
+      <h1>camDetection</h1>
+      <div class="sub" data-i18n="subtitle">Live object detection</div>
+    </div>
+  </div>
+  <div class="head-right">
+    <div class="live" id="live"><span class="dot"></span><span data-i18n="live">Live</span></div>
+    <a class="btn logout" id="logout" href="/logout" hidden><span id="userName"></span> · <span data-i18n="logout">Log out</span></a>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="card" style="overflow:hidden">
+      <div class="video-wrap" id="videoWrap">
+        <img id="video" src="/video" alt="Live camera">
+        <div class="error" id="errorBox"></div>
+      </div>
+      <div class="toolbar">
+        <a class="btn" href="/snapshot.jpg" data-i18n="snapshot">📸 Snapshot</a>
+        <button id="nextCam" data-i18n="nextCam">🔄 Switch camera</button>
+        <button id="fullscreen" data-i18n="fullscreen">⛶ Fullscreen</button>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card section">
+      <h2 data-i18n="now">Right now</h2>
+      <div class="stats">
+        <div class="stat"><div class="num" id="total">0</div><div class="lbl" data-i18n="objects">Objects detected</div></div>
+        <div class="stat"><div class="num" id="fps">0</div><div class="lbl">FPS</div></div>
+      </div>
+    </div>
+
+    <div class="card section">
+      <h2 data-i18n="seen">Objects seen</h2>
+      <ul class="objects" id="objects"></ul>
+    </div>
+
+    <div class="card section" id="alertCard">
+      <h2 data-i18n="alertsTitle">Alerts</h2>
+
+      <div id="tgBlock">
+        <div class="toggle-row">
+          <div><div class="t-title" data-i18n="tgAlerts">📲 Telegram alerts</div><div class="t-sub" data-i18n="tgSub">Photo sent to your phone</div></div>
+          <button class="switch" id="swAlerts" role="switch" aria-label="Telegram"></button>
+        </div>
+        <div class="toggle-row">
+          <div><div class="t-title" data-i18n="clipTitle">🎥 5-second video</div><div class="t-sub" data-i18n="clipSub">Sent after the photo</div></div>
+          <button class="switch" id="swClip" role="switch" aria-label="Video"></button>
+        </div>
+        <div class="chips-block">
+          <label data-i18n="tgObjects">Objects for Telegram alerts</label>
+          <div class="chips" id="tgChips"></div>
+          <select id="tgAdd"></select>
+        </div>
+      </div>
+
+      <div id="voiceBlock">
+        <div class="toggle-row">
+          <div><div class="t-title" data-i18n="voiceTitle">🔊 Voice alert</div><div class="t-sub" data-i18n="voiceSub">The computer speaks out loud</div></div>
+          <button class="switch" id="swVoice" role="switch" aria-label="Voice"></button>
+        </div>
+        <div class="chips-block">
+          <label data-i18n="voiceObjects">Objects for voice alerts</label>
+          <div class="chips" id="voiceChips"></div>
+          <select id="voiceAdd"></select>
+        </div>
+      </div>
+
+      <div class="cam-actions">
+        <button id="testVoice" data-i18n="testVoice">▶️ Test voice</button>
+        <button id="sendPhoto" data-i18n="sendPhoto">📸 Send photo to Telegram</button>
+      </div>
+      <div class="hint" id="alertMsg"></div>
+    </div>
+
+    <div class="card section">
+      <h2 data-i18n="settings">Settings</h2>
+      <div class="control">
+        <label data-i18n="camera">Camera</label>
+        <div class="cams" id="cameraList"></div>
+        <div class="cam-actions">
+          <button id="rescan" data-i18n="rescan">🔍 Rescan</button>
+        </div>
+        <div class="hint" id="camHint"></div>
+      </div>
+      <div class="control">
+        <label><span data-i18n="confidence">Minimum confidence</span><b id="confVal">50%</b></label>
+        <input type="range" id="conf" min="0.1" max="0.9" step="0.05" value="0.5">
+      </div>
+      <div class="control">
+        <label><span data-i18n="textSize">Text size</span><b id="sizeVal">1.0×</b></label>
+        <input type="range" id="size" min="0.6" max="2.5" step="0.1" value="1">
+      </div>
+    </div>
+
+    <div class="card section">
+      <h2 data-i18n="activity">Recent activity</h2>
+      <ul class="events" id="events"></ul>
+    </div>
+  </aside>
+</main>
+<footer id="footer"></footer>
+
+<script>
+const I18N = {
+  ms: { subtitle: "Pengesanan objek secara langsung", live: "Langsung", offline: "Terputus",
+        snapshot: "📸 Tangkap gambar", fullscreen: "⛶ Skrin penuh", now: "Sekarang",
+        objects: "Objek dikesan", seen: "Objek dilihat", settings: "Tetapan", camera: "Kamera",
+        language: "Bahasa", confidence: "Keyakinan minimum", textSize: "Saiz tulisan",
+        activity: "Aktiviti terkini", none: "Tiada objek dikesan", resolution: "Resolusi",
+        alerts: "Amaran Telegram", on: "Hidup", off: "Mati",
+        alertsTitle: "Amaran", tgAlerts: "📲 Amaran Telegram", tgSub: "Foto dihantar ke telefon anda",
+        clipTitle: "🎥 Video 5 saat", clipSub: "Dihantar selepas foto", tgObjects: "Objek untuk amaran Telegram",
+        voiceTitle: "🔊 Amaran suara", voiceSub: "Komputer bercakap dalam Bahasa Melayu", voiceObjects: "Objek untuk amaran suara",
+        testVoice: "▶️ Uji suara", sendPhoto: "📸 Hantar foto ke Telegram", addObject: "+ Tambah objek…",
+        noObjects: "Tiada objek dipilih", speaking: "🔊 Sedang bercakap…", photoSent: "✅ Foto dihantar ke Telegram",
+        sending: "Menghantar…", failed: "❌ Gagal. Cuba lagi.",
+        logout: "Log keluar", nextCam: "🔄 Tukar kamera", rescan: "🔍 Imbas semula", scanning: "Mengimbas kamera…",
+        dark: "Gelap", noCams: "Tiada kamera dijumpai", camHint: "Tekan gambar untuk tukar kamera. Imbas semula jika anda sambung kamera baharu." },
+  en: { subtitle: "Live object detection", live: "Live", offline: "Offline",
+        snapshot: "📸 Snapshot", fullscreen: "⛶ Fullscreen", now: "Right now",
+        objects: "Objects detected", seen: "Objects seen", settings: "Settings", camera: "Camera",
+        language: "Language", confidence: "Minimum confidence", textSize: "Text size",
+        activity: "Recent activity", none: "Nothing detected", resolution: "Resolution",
+        alerts: "Telegram alerts", on: "On", off: "Off",
+        alertsTitle: "Alerts", tgAlerts: "📲 Telegram alerts", tgSub: "Photo sent to your phone",
+        clipTitle: "🎥 5-second video", clipSub: "Sent after the photo", tgObjects: "Objects for Telegram alerts",
+        voiceTitle: "🔊 Voice alert", voiceSub: "The computer says it out loud", voiceObjects: "Objects for voice alerts",
+        testVoice: "▶️ Test voice", sendPhoto: "📸 Send photo to Telegram", addObject: "+ Add object…",
+        noObjects: "No objects chosen", speaking: "🔊 Speaking…", photoSent: "✅ Photo sent to Telegram",
+        sending: "Sending…", failed: "❌ Failed. Try again.",
+        logout: "Log out", nextCam: "🔄 Switch camera", rescan: "🔍 Rescan", scanning: "Scanning cameras…",
+        dark: "Dark", noCams: "No cameras found", camHint: "Tap a picture to switch camera. Rescan after connecting a new camera." },
+};
+let lang = "en";
+const $ = (id) => document.getElementById(id);
+
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = I18N[lang][el.dataset.i18n]; });
+  if (typeof renderCameras === "function" && $("cameraList")) renderCameras();
+  if (typeof renderAlertLabels === "function" && typeof objectList !== "undefined") { try { renderAlertLabels(); } catch (e) {} }
+}
+
+function setActive(selector, attr, value) {
+  document.querySelectorAll(selector).forEach((b) => b.classList.toggle("active", b.dataset[attr] === String(value)));
+}
+
+async function saveSettings(changes) {
+  try {
+    await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(changes) });
+  } catch (e) { /* the next stats poll will show the connection state */ }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+let slidersReady = false;
+async function poll() {
+  try {
+    const r = await fetch("/api/stats", { cache: "no-store" });
+    if (r.status === 401) { location.href = "/login"; return; }
+    const d = await r.json();
+    $("live").classList.toggle("off", !!d.error);
+    $("live").lastElementChild.textContent = I18N[lang][d.error ? "offline" : "live"];
+    $("videoWrap").classList.toggle("has-error", !!d.error);
+    $("errorBox").textContent = d.error || "";
+
+    $("total").textContent = d.total;
+    $("fps").textContent = Math.round(d.fps);
+
+    const max = Math.max(1, ...d.counts.map((c) => c[1]));
+    $("objects").innerHTML = d.counts.length
+      ? d.counts.map(([name, n]) => `<li class="obj"><div class="row"><span>${escapeHtml(name.charAt(0).toUpperCase() + name.slice(1))}</span><span>${n}</span></div><div class="bar"><span style="width:${(n / max) * 100}%"></span></div></li>`).join("")
+      : `<li class="empty">${I18N[lang].none}</li>`;
+
+    $("events").innerHTML = d.events.map((e) => `<li><time>${e.time}</time><span>${escapeHtml(e.text)}</span></li>`).join("");
+
+    const s = d.settings;
+    if (s.lang !== lang) { lang = s.lang; applyLang(); }
+    if (s.camera !== currentCam) { currentCam = s.camera; renderCameras(); }
+    updateAlertPanel(d);
+    if (!slidersReady) {
+      $("conf").value = s.conf; $("size").value = s.text_size;
+      $("confVal").textContent = Math.round(s.conf * 100) + "%";
+      $("sizeVal").textContent = Number(s.text_size).toFixed(1) + "×";
+      slidersReady = true;
+    }
+    $("footer").textContent = `${I18N[lang].camera} ${s.camera} · ${I18N[lang].resolution} ${d.resolution || "—"}`;
+  } catch (e) {
+    $("live").classList.add("off");
+    $("live").lastElementChild.textContent = I18N[lang].offline;
+  }
+}
+
+// ---- Camera picker ----
+let cameras = [], currentCam = null, scanning = false, thumbStamp = Date.now();
+
+function switchCamera(index) {
+  currentCam = index;
+  renderCameras();
+  saveSettings({ camera: index });
+}
+
+function renderCameras() {
+  const t = I18N[lang];
+  $("camHint").textContent = scanning ? t.scanning : t.camHint;
+  $("rescan").disabled = scanning;
+  if (!cameras.length) {
+    $("cameraList").innerHTML = `<div class="empty">${scanning ? t.scanning : t.noCams}</div>`;
+    return;
+  }
+  $("cameraList").innerHTML = cameras.map((c) => `
+    <button class="cam${c.index === currentCam ? " active" : ""}" data-cam="${c.index}">
+      <img src="/camera/${c.index}/thumb.jpg?t=${thumbStamp}" alt="" onerror="this.outerHTML='<div class=noimg>📷</div>'">
+      <span class="cap"><span>${t.camera} ${c.index}${c.dark ? ` <span class="badge">· ${t.dark}</span>` : ""}</span></span>
+    </button>`).join("");
+  document.querySelectorAll("[data-cam]").forEach((b) => b.onclick = () => switchCamera(+b.dataset.cam));
+}
+
+async function loadCameras() {
+  try {
+    const d = await (await fetch("/api/cameras", { cache: "no-store" })).json();
+    cameras = d.cameras; currentCam = d.current; scanning = d.scanning;
+    thumbStamp = Date.now();
+    renderCameras();
+    if (scanning) setTimeout(loadCameras, 1000);
+  } catch (e) { setTimeout(loadCameras, 3000); }
+}
+
+$("rescan").onclick = async () => {
+  scanning = true; renderCameras();
+  await fetch("/api/cameras/scan", { method: "POST" });
+  setTimeout(loadCameras, 1000);
+};
+
+$("nextCam").onclick = () => {
+  if (cameras.length < 2) return;
+  // Prefer cameras that are not black; fall back to any other camera.
+  const order = cameras.filter((c) => !c.dark).concat(cameras.filter((c) => c.dark));
+  const others = order.filter((c) => c.index !== currentCam);
+  const after = cameras.find((c) => c.index > currentCam && !c.dark) || others[0];
+  if (after) switchCamera(after.index);
+};
+setInterval(loadCameras, 10000);  // refresh previews
+// ---- Alerts panel ----
+let objectList = [], alertLabels = [], voiceLabels = [], alertState = {};
+
+function objName(key) {
+  const o = objectList.find((x) => x.key === key);
+  const name = o ? (lang === "ms" ? o.ms : o.en) : key;
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function renderChips(chipsId, selectId, labels, field) {
+  const t = I18N[lang];
+  $(chipsId).innerHTML = labels.length
+    ? labels.map((k) => `<span class="chip">${escapeHtml(objName(k))}<button data-remove="${escapeHtml(k)}" aria-label="remove">×</button></span>`).join("")
+    : `<span class="empty">${t.noObjects}</span>`;
+  $(chipsId).querySelectorAll("[data-remove]").forEach((b) => b.onclick = () => {
+    const next = labels.filter((k) => k !== b.dataset.remove);
+    setLabels(field, next);
+  });
+  const options = objectList.filter((o) => !labels.includes(o.key))
+    .map((o) => ({ key: o.key, name: objName(o.key) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  $(selectId).innerHTML = `<option value="">${t.addObject}</option>` +
+    options.map((o) => `<option value="${escapeHtml(o.key)}">${escapeHtml(o.name)}</option>`).join("");
+}
+
+function setLabels(field, next) {
+  if (field === "alert_labels") alertLabels = next; else voiceLabels = next;
+  renderAlertLabels();
+  saveSettings({ [field]: next });
+}
+
+function renderAlertLabels() {
+  renderChips("tgChips", "tgAdd", alertLabels, "alert_labels");
+  renderChips("voiceChips", "voiceAdd", voiceLabels, "voice_labels");
+}
+
+let lastLabelsKey = "";
+function updateAlertPanel(d) {
+  const s = d.settings;
+  alertState = s;
+  $("tgBlock").hidden = !d.telegram;
+  $("sendPhoto").hidden = !d.telegram;
+  $("voiceBlock").hidden = !d.voice_available;
+  $("testVoice").hidden = !d.voice_available;
+  $("alertCard").hidden = !d.telegram && !d.voice_available;
+  $("swAlerts").classList.toggle("on", !!s.alerts);
+  $("swClip").classList.toggle("on", !!s.clip);
+  $("swVoice").classList.toggle("on", !!s.voice);
+  const key = JSON.stringify([d.alert_labels, d.voice_labels, lang, objectList.length]);
+  if (key !== lastLabelsKey) {   // only re-render when something changed
+    lastLabelsKey = key;
+    alertLabels = d.alert_labels; voiceLabels = d.voice_labels;
+    renderAlertLabels();
+  }
+}
+
+function showAlertMsg(text, cls) {
+  const el = $("alertMsg");
+  el.textContent = text; el.className = "hint " + (cls || "");
+  clearTimeout(showAlertMsg.timer);
+  showAlertMsg.timer = setTimeout(() => { el.textContent = ""; }, 4000);
+}
+
+$("swAlerts").onclick = () => { const on = !alertState.alerts; alertState.alerts = on; $("swAlerts").classList.toggle("on", on); saveSettings({ alerts: on }); };
+$("swClip").onclick = () => { const on = !alertState.clip; alertState.clip = on; $("swClip").classList.toggle("on", on); saveSettings({ clip: on }); };
+$("swVoice").onclick = () => { const on = !alertState.voice; alertState.voice = on; $("swVoice").classList.toggle("on", on); saveSettings({ voice: on }); };
+$("tgAdd").onchange = (e) => { if (e.target.value) setLabels("alert_labels", [...alertLabels, e.target.value]); };
+$("voiceAdd").onchange = (e) => { if (e.target.value) setLabels("voice_labels", [...voiceLabels, e.target.value]); };
+$("testVoice").onclick = async () => {
+  showAlertMsg(I18N[lang].speaking);
+  try { await fetch("/api/test-voice", { method: "POST" }); } catch (e) { showAlertMsg(I18N[lang].failed, "bad-msg"); }
+};
+$("sendPhoto").onclick = async () => {
+  const btn = $("sendPhoto"); btn.disabled = true; showAlertMsg(I18N[lang].sending);
+  try {
+    const r = await fetch("/api/telegram/photo", { method: "POST" });
+    showAlertMsg(r.ok ? I18N[lang].photoSent : I18N[lang].failed, r.ok ? "ok-msg" : "bad-msg");
+  } catch (e) { showAlertMsg(I18N[lang].failed, "bad-msg"); }
+  btn.disabled = false;
+};
+fetch("/api/objects").then((r) => r.json()).then((list) => { objectList = list; lastLabelsKey = ""; }).catch(() => {});
+$("conf").oninput = (e) => { $("confVal").textContent = Math.round(e.target.value * 100) + "%"; };
+$("conf").onchange = (e) => saveSettings({ conf: +e.target.value });
+$("size").oninput = (e) => { $("sizeVal").textContent = Number(e.target.value).toFixed(1) + "×"; };
+$("size").onchange = (e) => saveSettings({ text_size: +e.target.value });
+$("fullscreen").onclick = () => {
+  const el = $("videoWrap");
+  (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+};
+// Reconnect the video stream if it drops.
+$("video").onerror = () => setTimeout(() => { $("video").src = "/video?t=" + Date.now(); }, 2000);
+
+fetch("/api/me").then((r) => r.json()).then((d) => {
+  if (d.login && d.user) { $("userName").textContent = "👤 " + d.user; $("logout").hidden = false; }
+}).catch(() => {});
+
+applyLang();
+loadCameras();
+poll();
+setInterval(poll, 700);
+</script>
+</body>
+</html>
