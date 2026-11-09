@@ -45,8 +45,10 @@ class VoiceTests(unittest.TestCase):
 
         command = popen.call_args.args[0]
         self.assertEqual(command[0], r"C:\Windows\System32\powershell.exe")
-        self.assertIn("System.Speech", command[-3])
-        self.assertEqual(command[-2:], ["en-US", "Alert! Person detected."])
+        self.assertIn("System.Speech", command[-1])
+        env = popen.call_args.kwargs["env"]
+        self.assertEqual(env["CAM_VOICE_CULTURE"], "en-US")
+        self.assertEqual(env["CAM_VOICE_TEXT"], "Alert! Person detected.")
 
     @patch("cam_detection.voice.subprocess.Popen")
     @patch("cam_detection.voice.shutil.which", return_value="/usr/bin/say")
