@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>camDetection – How It Spots a Cow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --ink: #0f1729; --ink-2: #3b4559; --muted: #6b7489; --line: #e3e7ef;
+    --paper: #f6f7fb; --card: #ffffff;
+    --navy: #0b1224; --navy-2: #131c36;
+    --red: #ff3b3b; --red-soft: #ffe7e7;
+    --amber: #ffb000; --amber-soft: #fff4d6;
+    --teal: #12b3a8; --teal-soft: #dcf6f3;
+    --blue: #3c8cff; --blue-soft: #e3eeff;
+    --violet: #7a5cff; --violet-soft: #ece7ff;
+    --road: #4a4f5a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper); }
+  body { font-family: "Inter", -apple-system, "Helvetica Neue", Arial, sans-serif; color: var(--ink);
+         -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 10.5pt; line-height: 1.45; }
+  .page { width: 210mm; height: 297mm; position: relative; overflow: hidden; page-break-after: always;
+          background: var(--paper); padding: 11mm 13mm 9mm; display: flex; flex-direction: column; }
+  .page:last-child { page-break-after: auto; }
+  h1, h2, h3, .num, .big { font-family: "Space Grotesk", "Inter", sans-serif; letter-spacing: -0.02em; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: .85em; }
+
+  /* ---------- header strip on inner pages ---------- */
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4mm; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 10pt; color: var(--ink); }
+  .brand .dot { width: 22px; height: 22px; border-radius: 7px; background: linear-gradient(135deg, var(--red), #ff7a45);
+                display: grid; place-items: center; }
+  .pill { font-size: 8pt; font-weight: 600; color: var(--muted); border: 1px solid var(--line); background: #fff;
+          padding: 3px 10px; border-radius: 99px; }
+  .eyebrow { font-size: 8.5pt; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--red); }
+  .section-title { font-size: 21pt; font-weight: 700; line-height: 1.05; margin: 1.5mm 0 1.5mm; }
+  .lede { color: var(--ink-2); font-size: 9.6pt; max-width: 165mm; }
+
+  /* ---------- page 1 hero ---------- */
+  .hero { background: radial-gradient(120% 90% at 100% 0%, #24305a 0%, var(--navy) 55%); color: #fff;
+          margin: -11mm -13mm 0; padding: 12mm 13mm 8mm; position: relative; }
+  .hero .eyebrow { color: #ff8a7a; }
+  .hero h1 { font-size: 34pt; line-height: .98; font-weight: 700; margin: 4mm 0 4mm; max-width: 150mm; }
+  .hero h1 em { font-style: normal; color: #ff6a4a; }
+  .hero p { color: #c4cbe0; font-size: 11pt; max-width: 120mm; }
+  .hero .brand { color: #fff; }
+  .hero-art { position: absolute; right: 11mm; top: 22mm; width: 66mm; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; margin-top: 6mm; }
+  .stat { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 14px; padding: 4mm; }
+  .stat .big { font-size: 22pt; font-weight: 700; line-height: 1; }
+  .stat .big small { font-size: 11pt; color: #aab3cc; margin-left: 2px; }
+  .stat .lbl { font-size: 8.3pt; color: #aab3cc; margin-top: 2mm; }
+
+  /* ---------- pipeline ---------- */
+  .pipeline { margin-top: 6mm; }
+  .pipe-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3.5mm; margin-top: 5mm; position: relative; }
+  .step { background: var(--card); border-radius: 16px; padding: 5mm 4mm 4.5mm; border: 1px solid var(--line);
+          position: relative; box-shadow: 0 6px 18px -10px rgba(15,23,41,.25); }
+  .step .num { position: absolute; top: -9px; left: 4mm; font-size: 8.5pt; font-weight: 700; color: #fff;
+               padding: 2px 9px; border-radius: 99px; }
+  .step .ico { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; margin-bottom: 3mm; }
+  .step h3 { font-size: 12.5pt; margin-bottom: 1.5mm; }
+  .step p { font-size: 8.8pt; color: var(--ink-2); line-height: 1.4; }
+  .step .tag { display: inline-block; margin-top: 3mm; font-size: 7.6pt; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+  .arrow { position: absolute; top: 50%; right: -4.2mm; width: 5mm; z-index: 2; transform: translateY(-50%); }
+
+  .c-blue   { background: var(--blue-soft);   color: var(--blue); }
+  .c-violet { background: var(--violet-soft); color: var(--violet); }
+  .c-teal   { background: var(--teal-soft);   color: #0a8a80; }
+  .c-red    { background: var(--red-soft);    color: #d92020; }
+  .c-amber  { background: var(--amber-soft);  color: #a36a00; }
+  .bg-blue { background: var(--blue); } .bg-violet { background: var(--violet); }
+  .bg-teal { background: var(--teal); } .bg-red { background: var(--red); }
+
+  /* ---------- outcome split ---------- */
+  .outcomes { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-top: 6mm; }
+  .outcome { border-radius: 16px; padding: 4mm; display: grid; grid-template-columns: 28mm 1fr; gap: 4mm; align-items: center; }
+  .outcome.red { background: linear-gradient(135deg, #fff0f0, #ffe1e1); border: 1px solid #ffc9c9; }
+  .outcome.amber { background: linear-gradient(135deg, #fffaf0, #fff0cc); border: 1px solid #ffe2a1; }
+  .outcome h3 { font-size: 13pt; margin-bottom: 1mm; }
+  .outcome p { font-size: 8.8pt; color: var(--ink-2); }
+  .outcome ul { list-style: none; margin-top: 2mm; font-size: 8.6pt; }
+  .outcome li { display: flex; gap: 6px; align-items: center; margin: 1mm 0; }
+  .outcome li b { font-weight: 600; }
+  .chk { width: 14px; height: 14px; border-radius: 4px; display: inline-grid; place-items: center; flex: none; font-size: 9px; color: #fff; font-weight: 700; }
+
+  .footer { margin-top: auto; padding-top: 4mm; border-top: 1px solid var(--line); display: flex; justify-content: space-between;
+            font-size: 7.8pt; color: var(--muted); }
+
+  /* ---------- page 2 ---------- */
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 4mm;
+          box-shadow: 0 6px 18px -12px rgba(15,23,41,.25); }
+  .card h3 { font-size: 13pt; margin-bottom: 2mm; display: flex; align-items: center; gap: 8px; }
+  .card h3 .n { width: 22px; height: 22px; border-radius: 7px; color: #fff; font-size: 9pt; display: grid; place-items: center; flex: none; }
+  .card p { font-size: 9pt; color: var(--ink-2); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 1.6mm 4mm; margin-top: 3mm; font-size: 8.7pt; }
+  .kv dt { color: var(--muted); } .kv dd { font-weight: 600; }
+
+  .tests { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin-top: 4mm; }
+  .test { border-radius: 12px; padding: 3mm; background: #f3f5fa; border: 1px solid var(--line); }
+  .test .q { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 10.5pt; margin: 2mm 0 1mm; }
+  .test p { font-size: 8.1pt; color: var(--ink-2); line-height: 1.35; }
+  .test .swatch { height: 7mm; border-radius: 8px; }
+  .test .yes { font-size: 7.4pt; font-weight: 700; color: #0a8a80; margin-top: 1.5mm; }
+  .test .no { font-size: 7.4pt; font-weight: 700; color: #d92020; }
+
+  .feet { display: grid; grid-template-columns: 56mm 1fr; gap: 5mm; align-items: center; margin-top: 4mm; }
+  .bar { height: 10px; border-radius: 99px; background: #e8ebf2; overflow: hidden; position: relative; margin: 1.5mm 0 1mm; }
+  .bar span { position: absolute; inset: 0 auto 0 0; border-radius: 99px; }
+  .bar i { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); left: 30%; }
+  .rule { font-size: 8.6pt; color: var(--ink-2); }
+  .rule b { color: var(--ink); }
+
+  .fix { display: flex; gap: 3mm; align-items: center; margin-top: 3mm; background: #f3f5fa; border-radius: 12px; padding: 3mm; }
+  .fix .chip { font-weight: 700; font-size: 8.6pt; padding: 3px 9px; border-radius: 8px; background: #fff; border: 1px solid var(--line); }
+
+  /* ---------- page 3 ---------- */
+  .alerts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3.5mm; margin-top: 4mm; }
+  .alert { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 3.5mm 4mm; display: grid;
+           grid-template-columns: 12mm 1fr; gap: 3.5mm; box-shadow: 0 6px 18px -12px rgba(15,23,41,.25); }
+  .alert .ico { width: 12mm; height: 12mm; border-radius: 14px; display: grid; place-items: center; }
+  .alert h3 { font-size: 12pt; margin-bottom: 1mm; }
+  .alert p { font-size: 8.7pt; color: var(--ink-2); }
+  .alert .meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2mm; }
+  .alert .meta span { font-size: 7.5pt; font-weight: 600; padding: 2px 7px; border-radius: 6px; background: #f1f3f8; color: var(--ink-2); }
+
+  .timeline { margin-top: 4mm; background: var(--navy); color: #fff; border-radius: 18px; padding: 5mm 6mm 4.5mm; }
+  .timeline h3 { font-size: 14pt; margin-bottom: 1mm; }
+  .timeline .sub { color: #aab3cc; font-size: 8.8pt; }
+  .tl { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); gap: 2mm; margin-top: 5mm; }
+  .tl::before { content: ""; position: absolute; left: 4%; right: 4%; top: 7px; height: 3px; border-radius: 3px;
+                background: linear-gradient(90deg, #5c6890 0%, var(--amber) 25%, var(--red) 45%, var(--red) 70%, #5c6890 100%); }
+  .tl .ev { position: relative; padding-top: 7mm; text-align: center; }
+  .tl .ev::before { content: ""; position: absolute; top: 0; left: 50%; width: 17px; height: 17px; transform: translateX(-50%);
+                    border-radius: 50%; background: var(--navy); border: 3px solid var(--c, #5c6890); }
+  .tl .t { font-family: "JetBrains Mono", monospace; font-size: 8pt; color: var(--c, #aab3cc); font-weight: 500; }
+  .tl .w { font-weight: 700; font-size: 9.3pt; margin: 1mm 0; }
+  .tl .d { font-size: 7.9pt; color: #c4cbe0; line-height: 1.35; }
+
+  .wiring { display: grid; grid-template-columns: 1fr 54mm; gap: 5mm; margin-top: 4mm; align-items: center; }
+  .safe { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin-top: 3mm; }
+  .safe div { background: #f3f5fa; border-radius: 10px; padding: 3mm; font-size: 8.2pt; color: var(--ink-2); }
+  .safe b { display: block; color: var(--ink); font-size: 9pt; margin-bottom: .5mm; }
+  .stack { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2.5mm; }
+  .stack span { font-size: 8pt; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: #fff; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+
+<!-- SVG symbols reused across pages -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="cow" viewBox="0 0 120 80">
+      <ellipse cx="60" cy="76" rx="44" ry="3.5" fill="#000" opacity=".18"/>
+      <rect x="28" y="52" width="8" height="22" rx="3" fill="#2b2b2b"/>
+      <rect x="40" y="54" width="8" height="20" rx="3" fill="#2b2b2b"/>
+      <rect x="70" y="54" width="8" height="20" rx="3" fill="#2b2b2b"/>
+      <rect x="82" y="52" width="8" height="22" rx="3" fill="#2b2b2b"/>
+      <rect x="18" y="24" width="80" height="36" rx="16" fill="#fafafa" stroke="#2b2b2b" stroke-width="2.5"/>
+      <path d="M34 26c8 2 12 10 8 18-4 7-14 6-18 0 0-10 3-17 10-18z" fill="#2b2b2b"/>
+      <path d="M66 36c6-4 15-2 17 5 2 6-4 12-11 11-7-1-10-11-6-16z" fill="#2b2b2b"/>
+      <path d="M18 34c-6 0-10 6-8 14" stroke="#2b2b2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <rect x="92" y="14" width="24" height="26" rx="10" fill="#fafafa" stroke="#2b2b2b" stroke-width="2.5"/>
+      <rect x="96" y="30" width="20" height="12" rx="6" fill="#ffb3b3" stroke="#2b2b2b" stroke-width="2"/>
+      <circle cx="102" cy="23" r="2.2" fill="#2b2b2b"/><circle cx="110" cy="23" r="2.2" fill="#2b2b2b"/>
+      <path d="M93 16l-6-6M115 16l5-6" stroke="#2b2b2b" stroke-width="2.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="arrow" viewBox="0 0 20 20">
+      <circle cx="10" cy="10" r="9" fill="#fff" stroke="#e3e7ef"/>
+      <path d="M8 6l4 4-4 4" stroke="#0f1729" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- ============================== PAGE 1 ============================== -->
+<section class="page">
+  <div class="hero">
+    <div class="brand">
+      <span class="dot"><svg width="13" height="13" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="#fff"/><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="2.5" fill="none"/></svg></span>
+      camDetection
+    </div>
+
+    <svg class="hero-art" viewBox="0 0 260 210">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d3b6b"/><stop offset="1" stop-color="#1c2647"/></linearGradient>
+      </defs>
+      <rect x="6" y="6" width="248" height="168" rx="16" fill="url(#sky)" stroke="#3a4777" stroke-width="2"/>
+      <path d="M6 118 Q130 100 254 118 V158 a16 16 0 0 1 -16 16 H22 a16 16 0 0 1 -16 -16z" fill="#2f6b4a"/>
+      <path d="M70 174 L112 112 H150 L196 174z" fill="#4a4f5a"/>
+      <path d="M131 118v10M131 138v12M131 160v12" stroke="#e8e8e8" stroke-width="3" stroke-linecap="round"/>
+      <use href="#cow" x="88" y="92" width="92" height="62"/>
+      <rect x="82" y="86" width="104" height="72" rx="6" fill="none" stroke="#ff3b3b" stroke-width="4"/>
+      <rect x="82" y="68" width="78" height="18" rx="4" fill="#ff3b3b"/>
+      <text x="90" y="81" font-family="Inter, sans-serif" font-weight="800" font-size="11" fill="#fff">COW  87%</text>
+      <circle cx="26" cy="24" r="5" fill="#ff3b3b"/>
+      <text x="36" y="28" font-family="Inter, sans-serif" font-weight="700" font-size="10" fill="#fff">LIVE</text>
+      <text x="200" y="28" font-family="JetBrains Mono, monospace" font-size="9" fill="#aab3cc">16 fps</text>
+      <rect x="96" y="182" width="68" height="22" rx="11" fill="#ff3b3b"/>
+      <text x="130" y="197" text-anchor="middle" font-family="Inter, sans-serif" font-weight="700" font-size="10" fill="#fff">ON THE ROAD</text>
+    </svg>
+
+    <div class="eyebrow" style="margin-top:7mm">System infographic · 2026</div>
+    <h1>How the camera<br>spots a <em>cow on<br>the road</em></h1>
+    <p>A live camera feed, a small AI model and a road colour test work together, so you are warned
+       only when a cow actually steps onto the road. You get a red box, a voice warning, a Telegram
+       message and an ESP32 warning light.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="big">~16<small>fps</small></div><div class="lbl">Pictures checked every second (on a MacBook)</div></div>
+      <div class="stat"><div class="big">80</div><div class="lbl">Kinds of object the default AI model knows, “cow” included</div></div>
+      <div class="stat"><div class="big">50<small>%</small></div><div class="lbl">Minimum AI confidence before a box is drawn</div></div>
+      <div class="stat"><div class="big">30<small>%</small></div><div class="lbl">Road needed around the cow’s feet to count as “on the road”</div></div>
+    </div>
+  </div>
+
+  <div class="pipeline">
+    <div class="eyebrow">The journey of one picture</div>
+    <h2 class="section-title" style="font-size:20pt">Four steps, many times a second</h2>
+
+    <div class="pipe-grid">
+      <div class="step">
+        <span class="num bg-blue">STEP 1</span>
+        <div class="ico c-blue"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+        <h3>Capture</h3>
+        <p>The camera sends a live picture (1280×720) to the computer. A frozen camera is caught after 3 s and reopened.</p>
+        <span class="tag c-blue">OpenCV</span>
+        <svg class="arrow" viewBox="0 0 20 20"><use href="#arrow"/></svg>
+      </div>
+      <div class="step">
+        <span class="num bg-violet">STEP 2</span>
+        <div class="ico c-violet"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg></div>
+        <h3>Detect</h3>
+        <p>The YOLO11 AI model looks at the whole picture and draws a box around every object it recognises, with a name and a confidence score.</p>
+        <span class="tag c-violet">YOLO11n · Ultralytics</span>
+        <svg class="arrow" viewBox="0 0 20 20"><use href="#arrow"/></svg>
+      </div>
+      <div class="step">
+        <span class="num bg-teal">STEP 3</span>
+        <div class="ico c-teal"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3L4 21M16 3l4 18M12 4v3M12 10v3M12 16v3"/></svg></div>
+        <h3>Road check</h3>
+        <p>A colour and texture test finds the grey asphalt, then checks the ground around each cow’s feet.</p>
+        <span class="tag c-teal">No zone drawing needed</span>
+        <svg class="arrow" viewBox="0 0 20 20"><use href="#arrow"/></svg>
+      </div>
+      <div class="step">
+        <span class="num bg-red">STEP 4</span>
+        <div class="ico c-red"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+        <h3>Warn</h3>
+        <p>A cow on the road triggers the flashing red box, a voice warning, Telegram and the ESP32 light, all at once.</p>
+        <span class="tag c-red">4 ways to warn you</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="outcomes">
+    <div class="outcome red">
+      <svg viewBox="0 0 130 100">
+        <rect x="2" y="2" width="126" height="96" rx="12" fill="#5c626d"/>
+        <path d="M2 30 H128" stroke="#2f6b4a" stroke-width="0"/>
+        <path d="M65 8v12M65 32v12M65 56v12M65 80v12" stroke="#e8e8e8" stroke-width="3" stroke-linecap="round"/>
+        <use href="#cow" x="18" y="22" width="92" height="62"/>
+        <rect x="12" y="16" width="104" height="72" rx="6" fill="rgba(255,59,59,.12)" stroke="#ff3b3b" stroke-width="5"/>
+      </svg>
+      <div>
+        <h3 style="color:#c81e1e">On the road → ALERT</h3>
+        <p>The ground at the cow’s feet is mostly asphalt.</p>
+        <ul>
+          <li><span class="chk" style="background:#ff3b3b">✓</span><b>Big flashing red box</b></li>
+          <li><span class="chk" style="background:#ff3b3b">✓</span>Voice, Telegram, ESP32 light</li>
+        </ul>
+      </div>
+    </div>
+    <div class="outcome amber">
+      <svg viewBox="0 0 130 100">
+        <rect x="2" y="2" width="126" height="96" rx="12" fill="#3f8a5c"/>
+        <path d="M12 20q6-6 12 0M90 14q6-6 12 0M40 86q6-6 12 0M100 84q6-6 12 0" stroke="#2c6b45" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <use href="#cow" x="18" y="22" width="92" height="62"/>
+        <rect x="14" y="18" width="100" height="68" rx="6" fill="none" stroke="#ffb000" stroke-width="4"/>
+      </svg>
+      <div>
+        <h3 style="color:#a36a00">Off the road → WATCH</h3>
+        <p>The cow is on grass or in the field.</p>
+        <ul>
+          <li><span class="chk" style="background:#ffb000">✓</span><b>Steady amber box</b></li>
+          <li><span class="chk" style="background:#b7bdc9">–</span>No sound, no message, light off</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer"><span>camDetection · Live object detection with road awareness</span><span>Page 1 / 3</span></div>
+</section>
+
+<!-- ============================== PAGE 2 ============================== -->
+<section class="page">
+  <div class="top">
+    <div class="brand"><span class="dot"><svg width="13" height="13" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="#fff"/><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="2.5" fill="none"/></svg></span>camDetection</div>
+    <span class="pill">Inside steps 2 & 3</span>
+  </div>
+
+  <div class="eyebrow">Step 2 · Detect</div>
+  <h2 class="section-title">The AI finds the cow</h2>
+  <p class="lede">Each picture goes to <b>YOLO11n</b> (“You Only Look Once”), a small, fast AI model that scans the whole picture in one pass and returns boxes, names and scores.</p>
+
+  <div class="two" style="margin-top:4mm">
+    <div class="card">
+      <svg viewBox="0 0 300 120" style="width:100%;display:block;border-radius:10px">
+        <rect width="300" height="120" fill="#3f8a5c"/>
+        <path d="M110 120 L140 40 H180 L215 120z" fill="#4a4f5a"/>
+        <use href="#cow" x="30" y="40" width="100" height="68"/>
+        <rect x="26" y="38" width="104" height="72" rx="4" fill="none" stroke="#ff3b3b" stroke-width="3"/>
+        <rect x="26" y="22" width="78" height="16" rx="3" fill="#ff3b3b"/>
+        <text x="32" y="34" font-family="Inter" font-weight="800" font-size="10" fill="#fff">cow 0.87</text>
+        <use href="#cow" x="190" y="34" width="70" height="48"/>
+        <rect x="188" y="32" width="74" height="52" rx="4" fill="none" stroke="#7a5cff" stroke-width="2.5" stroke-dasharray="5 3"/>
+        <rect x="188" y="18" width="88" height="14" rx="3" fill="#7a5cff"/>
+        <text x="193" y="29" font-family="Inter" font-weight="700" font-size="9" fill="#fff">dog 0.62 → cow</text>
+      </svg>
+      <dl class="kv">
+        <dt>Model</dt><dd>YOLO11n <span class="mono">yolo11n.pt</span> (80 objects)</dd>
+        <dt>Bigger option</dt><dd>YOLOv8 Open Images, 600 objects</dd>
+        <dt>Confidence</dt><dd>≥ 50 % (you can change this on the web page)</dd>
+              </dl>
+    </div>
+
+    <div class="card">
+      <h3><span class="n bg-violet">A</span>Fixing AI mix-ups</h3>
+      <p>From some angles the model may call a cow a <b>“dog”</b>. The <span class="mono">--treat-as dog=cow</span> setting
+         counts those as cows, so none are missed.</p>
+      <div class="fix"><span class="chip">dog</span>
+        <svg width="26" height="12" viewBox="0 0 26 12"><path d="M1 6h22M18 1l5 5-5 5" stroke="#7a5cff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+        <span class="chip" style="border-color:#7a5cff;color:#7a5cff">cow</span>
+        <span style="font-size:8pt;color:var(--muted)">renamed before any check</span></div>
+
+      <h3 style="margin-top:3.5mm"><span class="n bg-violet">B</span>No double counting</h3>
+      <p>After renaming, one animal may get two boxes (one from “cow”, one from “dog”). When two
+         <b>cow</b> boxes overlap by <b>60 % or more</b>, only the most confident one is kept.</p>
+      <svg viewBox="0 0 280 70" style="width:62%;margin:2mm auto 0;display:block">
+        <rect x="10" y="10" width="80" height="50" rx="4" fill="none" stroke="#7a5cff" stroke-width="2.5"/>
+        <rect x="20" y="16" width="80" height="48" rx="4" fill="none" stroke="#ff3b3b" stroke-width="2.5"/>
+        <text x="55" y="42" font-family="Inter" font-size="10" font-weight="700" fill="#3b4559" text-anchor="middle">2 boxes</text>
+        <path d="M120 37h40M152 30l8 7-8 7" stroke="#0f1729" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <rect x="185" y="13" width="80" height="50" rx="4" fill="rgba(255,59,59,.08)" stroke="#ff3b3b" stroke-width="3"/>
+        <text x="225" y="42" font-family="Inter" font-size="10" font-weight="700" fill="#c81e1e" text-anchor="middle">1 cow</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="eyebrow" style="margin-top:6mm;color:#0a8a80">Step 3 · Road check</div>
+  <h2 class="section-title">Is the cow on the road?</h2>
+  <p class="lede">No zones to draw: asphalt is recognised by how it looks, so it still works if the camera moves. Each pixel (on a fast 320-px copy) is road only if it passes all four tests:</p>
+
+  <div class="tests">
+    <div class="test">
+      <div class="swatch" style="background:linear-gradient(90deg,#55585e,#6a6d72)"></div>
+      <div class="q">① Grey?</div>
+      <p>Almost no colour: red, green and blue nearly equal.</p>
+      <div class="yes">✓ asphalt</div><div class="no">✗ grass, soil, sky</div>
+    </div>
+    <div class="test">
+      <div class="swatch" style="background:linear-gradient(90deg,#141414 0 22%,#5b5e63 22% 78%,#e2e2e2 78%)"></div>
+      <div class="q">② Mid-bright?</div>
+      <p>Brightness 15–200 (of 255): not black, not too light.</p>
+      <div class="yes">✓ asphalt</div><div class="no">✗ shadows, white walls</div>
+    </div>
+    <div class="test">
+      <div class="swatch" style="background:#5b5e63 url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%228%22 height=%228%22><rect width=%222%22 height=%222%22 fill=%22%23777%22/><rect x=%225%22 y=%224%22 width=%222%22 height=%222%22 fill=%22%23444%22/><rect x=%222%22 y=%226%22 width=%221%22 height=%221%22 fill=%22%23888%22/></svg>')"></div>
+      <div class="q">③ Grainy?</div>
+      <p>Rough texture (≥ 2.2 % variation), like asphalt.</p>
+      <div class="yes">✓ asphalt</div><div class="no">✗ metal, glass, walls</div>
+    </div>
+    <div class="test">
+      <div class="swatch" style="background:linear-gradient(90deg,#3f8a5c 0 8%,#5b5e63 8% 12%,#3f8a5c 12% 30%,#5b5e63 30% 92%,#3f8a5c 92%)"></div>
+      <div class="q">④ Wide & big?</div>
+      <p>Thin strips and patches under 2 % are removed.</p>
+      <div class="yes">✓ the road</div><div class="no">✗ rails, kerbs, tyres</div>
+    </div>
+  </div>
+
+  <div class="card feet" style="margin-top:4mm">
+    <svg viewBox="0 0 300 190" style="width:100%">
+      <rect width="300" height="190" rx="12" fill="#3f8a5c"/>
+      <path d="M60 190 L120 20 H190 L250 190z" fill="#4a4f5a"/>
+      <path d="M60 190 L120 20 H190 L250 190z" fill="rgba(60,140,255,.35)"/>
+      <use href="#cow" x="96" y="56" width="120" height="80"/>
+      <rect x="94" y="54" width="124" height="84" rx="4" fill="none" stroke="#ff3b3b" stroke-width="3"/>
+      <rect x="57" y="125" width="198" height="26" rx="3" fill="rgba(255,176,0,.25)" stroke="#ffb000" stroke-width="2.5" stroke-dasharray="6 4"/>
+      <text x="156" y="174" text-anchor="middle" font-family="Inter" font-weight="700" font-size="11" fill="#fff">“feet band” around the bottom of the box</text>
+      <text x="12" y="20" font-family="Inter" font-weight="700" font-size="10" fill="#fff">Blue = road found by the test</text>
+    </svg>
+    <div>
+      <h3 style="font-size:13pt;margin-bottom:2mm">The “feet band” rule</h3>
+      <p class="rule">The app checks a strip around the <b>bottom edge of the cow’s box</b>, where the hooves are. The cow’s own pixels are <b>left out</b>, so a black cow is never mistaken for asphalt.</p>
+      <div style="margin-top:2.5mm">
+        <div class="rule"><b>Cow on the road</b>: 72 % road in the band</div>
+        <div class="bar"><span style="width:72%;background:var(--red)"></span><i></i></div>
+        <div class="rule" style="margin-top:2.5mm"><b>Cow on the verge</b>: 12 % road in the band</div>
+        <div class="bar"><span style="width:12%;background:var(--amber)"></span><i></i></div>
+        <div class="rule" style="margin-top:1mm;font-size:8pt;color:var(--muted)">│ = 30 % line. At or above it the cow is <b style="color:#c81e1e">on the road</b>.</div>
+      </div>
+      <p class="rule" style="margin-top:1.5mm;font-size:8pt">Tip: turn on <b>“Show detected road”</b> on the web page to see it tinted blue.</p>
+    </div>
+  </div>
+
+  <div class="footer"><span>Numbers are the app’s default settings and can be tuned with command-line options.</span><span>Page 2 / 3</span></div>
+</section>
+
+<!-- ============================== PAGE 3 ============================== -->
+<section class="page">
+  <div class="top">
+    <div class="brand"><span class="dot"><svg width="13" height="13" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="#fff"/><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="2.5" fill="none"/></svg></span>camDetection</div>
+    <span class="pill">Inside step 4</span>
+  </div>
+
+  <div class="eyebrow">Step 4 · Warn</div>
+  <h2 class="section-title">Four ways you are warned</h2>
+  <p class="lede">Only a cow <b>on the road</b> triggers the warnings. Each one has its own cooldown, so you are told quickly but never flooded.</p>
+
+  <div class="alerts">
+    <div class="alert">
+      <div class="ico c-red"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10" fill="currentColor" opacity=".25"/></svg></div>
+      <div><h3>Flashing red box</h3>
+        <p>On the live web page the box grows bigger and flashes red with a glow, labelled in capitals: <b>COW 87%</b>.</p>
+        <div class="meta"><span>Blinks every 0.35 s</span><span>English / Malay labels</span></div></div>
+    </div>
+    <div class="alert">
+      <div class="ico c-violet"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg></div>
+      <div><h3>Voice warning</h3>
+        <p>The computer says it out loud: <i>“Alert! Cow detected.”</i></p>
+        <div class="meta"><span>Repeats at most every 10 s</span><span>macOS voice</span></div></div>
+    </div>
+    <div class="alert">
+      <div class="ico c-blue"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></div>
+      <div><h3>Telegram message</h3>
+        <p>A <b>photo is sent straight away</b>, then a <b>5-second video</b> (2 s before the alert and 3 s after).</p>
+        <div class="meta"><span>Once per 60 s per object</span><span>/photo · /status · /on · /off</span></div></div>
+    </div>
+    <div class="alert">
+      <div class="ico c-amber"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg></div>
+      <div><h3>ESP32 light & buzzer</h3>
+        <p>A warning light (or relay) and a buzzer on the road side <b>blink and beep</b> together while the cow is on the road.</p>
+        <div class="meta"><span>Keeps going 3 s after it leaves</span><span>USB · 115200 baud</span></div></div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <h3>A cow crossing the road: second by second</h3>
+    <div class="sub">What the system does as one cow walks from the field, across the road, and away.</div>
+    <div class="tl">
+      <div class="ev" style="--c:#aab3cc"><div class="t">0 s</div><div class="w">In the field</div><div class="d">Seen by the AI. Amber box, no alert.</div></div>
+      <div class="ev" style="--c:#ffb000"><div class="t">4 s</div><div class="w">Reaches the edge</div><div class="d">Feet band 15 % road, still below 30 %. Amber.</div></div>
+      <div class="ev" style="--c:#ff3b3b"><div class="t">6 s</div><div class="w">Steps on</div><div class="d">Band &gt; 30 % road. Red box, voice, Telegram photo, light on.</div></div>
+      <div class="ev" style="--c:#ff3b3b"><div class="t">9 s</div><div class="w">Video sent</div><div class="d">The 5 s clip arrives on Telegram. Light still blinking.</div></div>
+      <div class="ev" style="--c:#aab3cc"><div class="t">15 s</div><div class="w">Off the road</div><div class="d">Light keeps going 3 s more, then turns off.</div></div>
+    </div>
+  </div>
+
+  <div class="wiring">
+    <div class="card">
+      <h3><span class="n" style="background:var(--amber)"><svg width="12" height="12" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="#fff"/></svg></span>How the ESP32 light stays safe</h3>
+      <p>The app sends one short message over USB <b>every 0.5 s</b>: <span class="mono">ON</span> (blink) or <span class="mono">OFF</span>.</p>
+      <div class="safe">
+        <div><b>Off at start</b>The light is off when the board powers up.</div>
+        <div><b>Fail-safe</b>No message for 3 s (app closed, cable pulled) and it switches off.</div>
+        <div><b>Self-finding</b>The app finds the board’s USB port by itself.</div>
+      </div>
+    </div>
+    <svg viewBox="0 0 260 190" style="width:100%">
+      <rect x="60" y="30" width="90" height="140" rx="8" fill="#1f2a44"/>
+      <rect x="80" y="40" width="50" height="34" rx="3" fill="#c0c6d4"/>
+      <text x="105" y="62" text-anchor="middle" font-family="Inter" font-weight="800" font-size="10" fill="#1f2a44">ESP32</text>
+      <rect x="90" y="166" width="30" height="14" rx="3" fill="#8b93a7"/>
+      <text x="105" y="188" text-anchor="middle" font-family="Inter" font-size="8" fill="#6b7489">USB to computer</text>
+      <g font-family="JetBrains Mono" font-size="9" fill="#fff">
+        <circle cx="140" cy="96" r="4" fill="#ffb000"/><text x="118" y="99">D4</text>
+        <circle cx="140" cy="126" r="4" fill="#7a5cff"/><text x="113" y="129">D18</text>
+        <circle cx="140" cy="150" r="4" fill="#8b93a7"/><text x="112" y="153">GND</text>
+      </g>
+      <path d="M144 96 H196" stroke="#ffb000" stroke-width="3"/>
+      <path d="M144 126 H196" stroke="#7a5cff" stroke-width="3"/>
+      <path d="M144 150 H236" stroke="#8b93a7" stroke-width="3"/>
+      <circle cx="212" cy="88" r="16" fill="#ff3b3b"/><circle cx="212" cy="88" r="25" fill="#ff3b3b" opacity=".2"/>
+      <text x="212" y="122" text-anchor="middle" font-family="Inter" font-weight="700" font-size="8.5" fill="#0f1729">LIGHT / RELAY</text>
+      <rect x="198" y="132" width="28" height="12" rx="6" fill="#0f1729"/>
+      <text x="246" y="141" font-family="Inter" font-weight="700" font-size="8.5" fill="#0f1729" text-anchor="end"></text>
+      <text x="212" y="164" text-anchor="middle" font-family="Inter" font-weight="700" font-size="8.5" fill="#0f1729">BUZZER</text>
+      <text x="8" y="20" font-family="Inter" font-weight="700" font-size="10" fill="#0f1729">Wiring (ESP32 DEVKIT V1)</text>
+    </svg>
+  </div>
+
+  <div class="card" style="margin-top:4mm">
+    <h3>Built with</h3>
+    <p>Everything runs on your own computer. Pictures leave it only when Telegram alerts are on.</p>
+    <div class="stack">
+      <span>🐍 Python</span><span>🎥 OpenCV</span><span>🧠 YOLO11 · Ultralytics</span><span>🔥 PyTorch</span>
+      <span>🌐 Flask web dashboard</span><span>🔐 Login page</span><span>📲 Telegram Bot API</span>
+      <span>🔌 pyserial</span><span>⚙️ ESP32 (Arduino)</span><span>🇲🇾 English / Malay</span>
+    </div>
+  </div>
+
+  <div class="footer"><span>camDetection · How the system detects a cow on the road</span><span>Page 3 / 3</span></div>
+</section>
+
+</body>
+</html>
