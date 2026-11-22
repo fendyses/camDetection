@@ -125,6 +125,14 @@
   }
   .switch.on { background: var(--good); border-color: var(--good); }
   .switch.on::after { transform: translateX(22px); }
+  .light-row { display: flex; align-items: center; gap: 12px; }
+  .led { width: 22px; height: 22px; border-radius: 50%; flex: none; background: #3a1d1d;
+         border: 2px solid #5a2a2a; box-shadow: inset 0 2px 4px rgba(0,0,0,.5); }
+  .led.blink { animation: ledBlink .6s steps(1) infinite; }
+  .led.offline { background: #333; border-color: #555; }
+  @keyframes ledBlink { 0% { background: #ff2a2a; border-color: #ff7070; box-shadow: 0 0 14px 4px rgba(255,40,40,.75); }
+                        50% { background: #3a1d1d; border-color: #5a2a2a; box-shadow: inset 0 2px 4px rgba(0,0,0,.5); } }
+  @media (prefers-reduced-motion: reduce) { .led.blink { animation: none; background: #ff2a2a; } }
   .chips-block { padding: 10px 0 12px; border-bottom: 1px solid var(--border); }
   .chips-block > label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
   .selection-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
@@ -229,6 +237,31 @@
       <div class="hint" id="alertMsg"></div>
     </div>
 
+    <div class="card section" id="roadCard">
+      <h2 data-i18n="roadTitle">Road &amp; light</h2>
+      <div id="roadBlock">
+        <div class="toggle-row">
+          <div><div class="t-title" data-i18n="roadOnly">🛣️ Only on the road</div><div class="t-sub" data-i18n="roadSub">On the road = red + alert · off the road = amber, no alert</div></div>
+          <button class="switch" id="swRoad" role="switch" aria-label="Road"></button>
+        </div>
+        <div class="toggle-row">
+          <div><div class="t-title" data-i18n="showRoad">Show detected road</div><div class="t-sub" data-i18n="showRoadSub">Tints the road blue so you can check it</div></div>
+          <button class="switch" id="swShowRoad" role="switch" aria-label="Show road"></button>
+        </div>
+        <div class="hint" id="roadCounts"></div>
+      </div>
+      <div class="toggle-row" id="lightBlock">
+        <div class="light-row">
+          <span class="led" id="ledView" role="img" aria-label="LED"></span>
+          <div><div class="t-title" data-i18n="lightTitle">💡 ESP32 light</div><div class="t-sub" id="lightStatus"></div></div>
+        </div>
+        <button class="switch" id="swLight" role="switch" aria-label="ESP32 light"></button>
+      </div>
+      <div class="cam-actions" id="lightActions">
+        <button id="testLight" data-i18n="testLight">💡 Test light (5 s)</button>
+      </div>
+    </div>
+
     <div class="card section">
       <h2 data-i18n="settings">Settings</h2>
       <div class="control">
@@ -272,7 +305,12 @@ const I18N = {
         noObjects: "Tiada objek dipilih", speaking: "🔊 Sedang bercakap…", photoSent: "✅ Foto dihantar ke Telegram",
         sending: "Menghantar…", failed: "❌ Gagal. Cuba lagi.",
         logout: "Log keluar", nextCam: "🔄 Tukar kamera", rescan: "🔍 Imbas semula", scanning: "Mengimbas kamera…",
-        dark: "Gelap", noCams: "Tiada kamera dijumpai", camHint: "Tekan gambar untuk tukar kamera. Imbas semula jika anda sambung kamera baharu." },
+        dark: "Gelap", noCams: "Tiada kamera dijumpai", camHint: "Tekan gambar untuk tukar kamera. Imbas semula jika anda sambung kamera baharu.",
+        roadTitle: "Jalan & lampu", roadOnly: "🛣️ Hanya atas jalan", roadSub: "Atas jalan = merah + amaran · luar jalan = kuning, tiada amaran",
+        showRoad: "Tunjuk jalan dikesan", showRoadSub: "Jalan diwarnakan biru supaya anda boleh semak",
+        onRoad: "Atas jalan", offRoad: "Luar jalan", lightTitle: "💡 Lampu ESP32",
+        lightOn: "Sedang berkelip", lightIdle: "Mati", connected: "Disambung", notConnected: "Tidak disambung — palam ESP32",
+        noSerial: "pyserial belum dipasang", testLight: "💡 Uji lampu (5 s)", lightTesting: "💡 Lampu berkelip 5 saat…" },
   en: { subtitle: "Live object detection", live: "Live", offline: "Offline",
         snapshot: "📸 Snapshot", fullscreen: "⛶ Fullscreen", now: "Right now",
         objects: "Objects detected", seen: "Objects seen", settings: "Settings", camera: "Camera",
@@ -286,7 +324,12 @@ const I18N = {
         noObjects: "No objects chosen", speaking: "🔊 Speaking…", photoSent: "✅ Photo sent to Telegram",
         sending: "Sending…", failed: "❌ Failed. Try again.",
         logout: "Log out", nextCam: "🔄 Switch camera", rescan: "🔍 Rescan", scanning: "Scanning cameras…",
-        dark: "Dark", noCams: "No cameras found", camHint: "Tap a picture to switch camera. Rescan after connecting a new camera." },
+        dark: "Dark", noCams: "No cameras found", camHint: "Tap a picture to switch camera. Rescan after connecting a new camera.",
+        roadTitle: "Road & light", roadOnly: "🛣️ Only on the road", roadSub: "On the road = red + alert · off the road = amber, no alert",
+        showRoad: "Show detected road", showRoadSub: "Tints the road blue so you can check it",
+        onRoad: "On the road", offRoad: "Off the road", lightTitle: "💡 ESP32 light",
+        lightOn: "Blinking", lightIdle: "Off", connected: "Connected", notConnected: "Not connected — plug in the ESP32",
+        noSerial: "pyserial is not installed", testLight: "💡 Test light (5 s)", lightTesting: "💡 Blinking for 5 seconds…" },
 };
 let lang = "en";
 const $ = (id) => document.getElementById(id);
@@ -312,12 +355,19 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// The video is one long-running request. When the app restarts it dies without an
+// error event, so reconnect it when the server changes or the picture stops loading.
+let bootId = null, wasOffline = false;
+function reloadVideo() { $("video").src = "/video?t=" + Date.now(); }
+
 let slidersReady = false;
 async function poll() {
   try {
     const r = await fetch("/api/stats", { cache: "no-store" });
     if (r.status === 401) { location.href = "/login"; return; }
     const d = await r.json();
+    if ((bootId && d.boot !== bootId) || wasOffline) reloadVideo();
+    bootId = d.boot; wasOffline = false;
     $("live").classList.toggle("off", !!d.error);
     $("live").lastElementChild.textContent = I18N[lang][d.error ? "offline" : "live"];
     $("videoWrap").classList.toggle("has-error", !!d.error);
@@ -345,6 +395,7 @@ async function poll() {
     }
     $("footer").textContent = `${I18N[lang].camera} ${s.camera} · ${I18N[lang].resolution} ${d.resolution || "—"}`;
   } catch (e) {
+    wasOffline = true;
     $("live").classList.add("off");
     $("live").lastElementChild.textContent = I18N[lang].offline;
   }
@@ -442,12 +493,35 @@ function updateAlertPanel(d) {
   $("swAlerts").classList.toggle("on", !!s.alerts);
   $("swClip").classList.toggle("on", !!s.clip);
   $("swVoice").classList.toggle("on", !!s.voice);
+  updateRoadPanel(d);
   const sharedLabels = d.detection_labels || [...new Set([...d.alert_labels, ...d.voice_labels])].sort();
   const key = JSON.stringify([sharedLabels, lang, objectList.length]);
   if (key !== lastLabelsKey) {   // only re-render when something changed
     lastLabelsKey = key;
     detectionLabels = sharedLabels;
     renderDetectionLabels();
+  }
+}
+
+function updateRoadPanel(d) {
+  const s = d.settings, t = I18N[lang], l = d.light;
+  $("roadBlock").hidden = !d.road_available;
+  $("lightBlock").hidden = !l;
+  $("lightActions").hidden = !l;
+  $("roadCard").hidden = !d.road_available && !l;
+  $("swRoad").classList.toggle("on", !!s.road);
+  $("swShowRoad").classList.toggle("on", !!s.show_road);
+  $("swShowRoad").disabled = !s.road;
+  $("roadCounts").textContent = s.road ? `${t.onRoad}: ${d.on_road || 0} · ${t.offRoad}: ${d.off_road || 0}` : "";
+  if (l) {
+    $("swLight").classList.toggle("on", !!s.light);
+    $("lightStatus").textContent = !l.available ? t.noSerial
+      : !l.connected ? t.notConnected
+      : `${t.connected} · ${l.port} · ${l.blinking ? t.lightOn : t.lightIdle}`;
+    const led = $("ledView");
+    led.classList.toggle("blink", !!(l.connected && l.blinking));
+    led.classList.toggle("offline", !l.connected);
+    $("testLight").disabled = !l.connected;
   }
 }
 
@@ -461,6 +535,15 @@ function showAlertMsg(text, cls) {
 $("swAlerts").onclick = () => { const on = !alertState.alerts; alertState.alerts = on; $("swAlerts").classList.toggle("on", on); saveSettings({ alerts: on }); };
 $("swClip").onclick = () => { const on = !alertState.clip; alertState.clip = on; $("swClip").classList.toggle("on", on); saveSettings({ clip: on }); };
 $("swVoice").onclick = () => { const on = !alertState.voice; alertState.voice = on; $("swVoice").classList.toggle("on", on); saveSettings({ voice: on }); };
+$("swRoad").onclick = () => { const on = !alertState.road; alertState.road = on; $("swRoad").classList.toggle("on", on); saveSettings({ road: on }); };
+$("swShowRoad").onclick = () => { const on = !alertState.show_road; alertState.show_road = on; $("swShowRoad").classList.toggle("on", on); saveSettings({ show_road: on }); };
+$("swLight").onclick = () => { const on = !alertState.light; alertState.light = on; $("swLight").classList.toggle("on", on); saveSettings({ light: on }); };
+$("testLight").onclick = async () => {
+  try {
+    const r = await fetch("/api/light/test", { method: "POST" });
+    showAlertMsg(r.ok ? I18N[lang].lightTesting : I18N[lang].failed, r.ok ? "ok-msg" : "bad-msg");
+  } catch (e) { showAlertMsg(I18N[lang].failed, "bad-msg"); }
+};
 $("detectionAdd").onchange = (e) => {
   if (e.target.value) setDetectionLabels([...detectionLabels, e.target.value]);
 };

@@ -20,14 +20,29 @@ class Detection:
     box: tuple[int, int, int, int]  # x1, y1, x2, y2
 
 
+def parse_aliases(text: str | None) -> dict[str, str]:
+    """'dog=cow, horse=cow' -> {"dog": "cow", "horse": "cow"}."""
+    aliases = {}
+    for part in (text or "").split(","):
+        if "=" in part:
+            seen, counted_as = (s.strip().lower() for s in part.split("=", 1))
+            if seen and counted_as and seen != counted_as:
+                aliases[seen] = counted_as
+    return aliases
+
+
 class ObjectDetector:
-    def __init__(self, model_path: str = "yolo11n.pt", confidence: float = 0.5, device: str | None = None):
+    def __init__(self, model_path: str = "yolo11n.pt", confidence: float = 0.5, device: str | None = None,
+                 aliases: dict[str, str] | None = None):
         # The model weights are downloaded automatically on first use.
         self.model = YOLO(model_path)
         self.confidence = confidence
         self.device = device
-        # All object names this model knows, lower-case (e.g. "teddy bear", "goat").
-        self.labels: set[str] = {name.lower() for name in self.model.names.values()}
+        # Objects the model mixes up, counted as the other one (e.g. a cow seen as "dog" -> "cow").
+        known = {name.lower() for name in self.model.names.values()}
+        self.aliases = {k: v for k, v in (aliases or {}).items() if k in known and v in known}
+        # All object names offered in the app, lower-case (e.g. "teddy bear", "goat"); merged names are hidden.
+        self.labels: set[str] = known - set(self.aliases)
 
     def detect(self, frame: np.ndarray) -> list[Detection]:
         result = self.model.predict(frame, conf=self.confidence, device=self.device, verbose=False)[0]
@@ -35,8 +50,27 @@ class ObjectDetector:
         for box in result.boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             cls_id = int(box.cls[0])
-            detections.append(Detection(result.names[cls_id].lower(), float(box.conf[0]), (x1, y1, x2, y2)))
-        return detections
+            label = result.names[cls_id].lower()
+            detections.append(Detection(self.aliases.get(label, label), float(box.conf[0]), (x1, y1, x2, y2)))
+        return merge_overlaps(detections)
+
+
+def merge_overlaps(detections: list[Detection], iou: float = 0.6) -> list[Detection]:
+    """After renaming, the model may report the same animal twice (as "cow" and as "dog").
+    Keep only the most confident box when two boxes with the same name overlap a lot."""
+    kept: list[Detection] = []
+    for det in sorted(detections, key=lambda d: d.confidence, reverse=True):
+        if all(det.label != k.label or _iou(det.box, k.box) < iou for k in kept):
+            kept.append(det)
+    return kept
+
+
+def _iou(a, b) -> float:
+    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
 
 
 # Bright, easy-to-tell-apart colours (RGB).
@@ -74,15 +108,19 @@ def _color_for(label: str) -> tuple[int, int, int]:
 
 
 ALERT_RED = (255, 35, 35)  # RGB
+WATCH_AMBER = (255, 176, 0)  # RGB - chosen object seen, but not on the road
 BLINK_SECONDS = 0.35       # how long each on/off phase of the flashing lasts
 
 
 def draw_detections(frame: np.ndarray, detections: list[Detection], fps: float | None = None,
                     text_scale: float = 1.0, lang: str = "en",
-                    highlight: set[str] | frozenset = frozenset()) -> np.ndarray:
+                    highlight: set[str] | frozenset = frozenset(),
+                    on_road: set[int] | None = None) -> np.ndarray:
     """Draw boxes and smooth, readable labels onto a BGR frame (in place) and return it.
 
     Objects whose label is in `highlight` get a bigger, flashing red box.
+    If `on_road` is given (indexes of detections standing on the road), only those
+    flash red; the other highlighted objects get a steady amber box.
     """
     h, w = frame.shape[:2]
     unit = max(h, w) / 1280 * text_scale        # scale everything with the picture size
@@ -93,17 +131,26 @@ def draw_detections(frame: np.ndarray, detections: list[Detection], fps: float |
     blink_on = int(time.time() / BLINK_SECONDS) % 2 == 0
     grow = max(6, int(14 * unit))  # how much bigger the alert box is than the object
 
-    def box_of(det: Detection) -> tuple[int, int, int, int]:
-        x1, y1, x2, y2 = det.box
-        if det.label in highlight:
+    def state(i: int) -> str:
+        if detections[i].label not in highlight:
+            return "normal"
+        return "alert" if on_road is None or i in on_road else "watch"
+
+    states = [state(i) for i in range(len(detections))]
+
+    def box_of(i: int) -> tuple[int, int, int, int]:
+        x1, y1, x2, y2 = detections[i].box
+        if states[i] == "alert":
             return max(x1 - grow, 0), max(y1 - grow, 0), min(x2 + grow, w - 1), min(y2 + grow, h - 1)
         return x1, y1, x2, y2
 
     # 1) Boxes with OpenCV (fast).
     red_bgr = ALERT_RED[::-1]
-    for det in detections:
-        x1, y1, x2, y2 = box_of(det)
-        if det.label in highlight:
+    for i, det in enumerate(detections):
+        x1, y1, x2, y2 = box_of(i)
+        if states[i] == "watch":
+            cv2.rectangle(frame, (x1, y1), (x2, y2), WATCH_AMBER[::-1], thickness * 2, lineType=cv2.LINE_AA)
+        elif states[i] == "alert":
             if blink_on:
                 # Red glow inside the box + a thick bright border.
                 roi = frame[y1:y2 + 1, x1:x2 + 1]
@@ -121,10 +168,12 @@ def draw_detections(frame: np.ndarray, detections: list[Detection], fps: float |
     font = _font(font_size)
 
     # Draw alert labels last so they sit on top of the others.
-    for det in sorted(detections, key=lambda d: d.label in highlight):
-        alert = det.label in highlight
-        color = ALERT_RED if alert else _color_for(det.label)
-        x1, y1, _, _ = box_of(det)
+    order = {"normal": 0, "watch": 1, "alert": 2}
+    for i in sorted(range(len(detections)), key=lambda i: order[states[i]]):
+        det = detections[i]
+        alert = states[i] == "alert"
+        color = {"alert": ALERT_RED, "watch": WATCH_AMBER}.get(states[i]) or _color_for(det.label)
+        x1, y1, _, _ = box_of(i)
         name = translate(det.label, lang)
         if alert:
             text = f"{name.upper()}  {det.confidence:.0%}"

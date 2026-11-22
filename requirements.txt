@@ -4,3 +4,4 @@ flask>=3.0
 requests>=2.32
 numpy>=1.26
 pillow>=10.0
+pyserial>=3.5

@@ -21,7 +21,9 @@ import cv2
 from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory, session
 
 from cam_detection.camera import open_camera
-from cam_detection.detector import ObjectDetector, draw_detections
+from cam_detection.detector import ObjectDetector, draw_detections, parse_aliases
+from cam_detection.esp_light import EspLight
+from cam_detection.road import RoadChecker, RoadSettings
 from cam_detection.telegram_alert import (TelegramAlerter, TelegramClient, load_env, parse_labels,
                                           save_env_value)
 from cam_detection.telegram_bot import TelegramBot
@@ -29,9 +31,12 @@ from cam_detection.voice import VoiceAnnouncer
 from cam_detection.translations import translate, ui
 
 WEB_DIR = Path(__file__).parent / "web"
+BOOT_ID = secrets.token_hex(4)  # changes on every restart, so the page knows to reconnect the video
 MAX_CAMERAS = 6          # camera numbers 0..5 are checked when scanning
 THUMB_WIDTH = 320        # preview picture width in the camera picker
 DARK_LEVEL = 12          # average brightness below this = "camera looks black"
+STALL_SECONDS = 5        # no new picture for this long = camera has stopped
+READ_TIMEOUT = 3         # a camera read that takes longer than this is treated as frozen
 
 
 def make_thumb(frame) -> bytes:
@@ -46,8 +51,11 @@ class CameraWorker:
     def __init__(self, detector: ObjectDetector, camera: int, width: int, height: int,
                  lang: str, text_size: float, alerter: TelegramAlerter | None = None,
                  voice: VoiceAnnouncer | None = None, alerts_on: bool = False,
-                 voice_on: bool = False, clip_seconds: float = 5):
+                 voice_on: bool = False, clip_seconds: float = 5,
+                 road: RoadChecker | None = None, light: EspLight | None = None):
         self.detector = detector
+        self.road = road      # only objects on the road trigger alerts (None = everywhere)
+        self.light = light    # ESP32 light that blinks while an alert object is on the road
         self.alerter = alerter
         self.voice = voice
         self.clip_seconds = clip_seconds
@@ -56,7 +64,8 @@ class CameraWorker:
         self.new_frame = threading.Condition()
         self.settings = {"camera": camera, "lang": lang, "conf": detector.confidence,
                          "text_size": text_size, "alerts": alerts_on and alerter is not None,
-                         "voice": voice_on and voice is not None, "clip": clip_seconds > 0}
+                         "voice": voice_on and voice is not None, "clip": clip_seconds > 0,
+                         "road": road is not None, "show_road": False, "light": light is not None}
         self.jpeg: bytes | None = None
         self.frame_id = 0
         self.stats: dict = {"fps": 0, "total": 0, "counts": [], "error": None,
@@ -67,6 +76,7 @@ class CameraWorker:
         self.scanning = True                  # scan once at start-up
         self._cap = None
         self._opened = None
+        self.last_frame_at = time.time()
         threading.Thread(target=self._loop, daemon=True).start()
 
     def update(self, **changes):
@@ -86,6 +96,19 @@ class CameraWorker:
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         self._opened = index
         return self._cap.isOpened()
+
+    def _read(self):
+        """Read one frame, but give up if the camera hangs (a frozen USB camera can block forever).
+
+        Returns (ok, frame), or None when the read is stuck. A stuck read is left behind in its own
+        thread and the camera is reopened, so switching camera or replugging still works.
+        """
+        result = {}
+        cap = self._cap
+        reader = threading.Thread(target=lambda: result.update(r=cap.read()), daemon=True)
+        reader.start()
+        reader.join(READ_TIMEOUT)
+        return None if reader.is_alive() else result["r"]
 
     def request_scan(self):
         self.scanning = True
@@ -147,7 +170,14 @@ class CameraWorker:
                 time.sleep(2)
                 return
 
-        ok, frame = self._cap.read()
+        got = self._read()
+        if got is None:
+            print(f"Camera {s['camera']} stopped responding - reopening it")
+            self._cap, self._opened = None, None  # don't release: that can block on a frozen camera too
+            self._set_error(f"Camera {s['camera']} stopped responding - unplug and replug it, then press Rescan")
+            time.sleep(2)
+            return
+        ok, frame = got
         if not ok:
             self._set_error("No image from the camera")
             time.sleep(0.5)
@@ -169,20 +199,32 @@ class CameraWorker:
         state['fps'] = fps
 
         highlight = (self.alerter.labels if self.alerter else set()) | (self.voice.labels if self.voice else set())
+        # Road rule: a chosen object only triggers when it stands on the (dark grey) road.
+        on_road = None
+        if self.road and s["road"]:
+            on_road = self.road.on_road(frame, detections)
+            if s["show_road"]:
+                self.road.draw_overlay(frame)
+        triggers = detections if on_road is None else [d for i, d in enumerate(detections) if i in on_road]
+        watched = [d for d in detections if d.label in highlight]
+        on_road_count = sum(d.label in highlight for d in triggers)
         draw_detections(frame, detections, fps=fps, text_scale=s["text_size"], lang=s["lang"],
-                        highlight=highlight)
+                        highlight=highlight, on_road=on_road)
         ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if not ok:
             return
+        if self.light:
+            self.light.enabled = s["light"]
+            self.light.update(on_road_count > 0)
         if self.voice:
             self.voice.lang = s["lang"]
             self.voice.enabled = s["voice"]
-            self.voice.check(detections)
+            self.voice.check(triggers)
         if self.alerter:
             self.alerter.enabled = s["alerts"]
             self.alerter.clip_seconds = (self.clip_seconds or 5) if s["clip"] else 0
             self.alerter.lang = s["lang"]
-            self.alerter.check(detections, buf.tobytes(), camera=s["camera"])
+            self.alerter.check(triggers, buf.tobytes(), camera=s["camera"])
 
         counts = Counter(translate(d.label, s["lang"]) for d in detections).most_common()
         summary = ", ".join(f"{n} x {name}" for name, n in counts) or ui("nothing", s["lang"])
@@ -191,11 +233,13 @@ class CameraWorker:
             state['last_summary'] = summary
 
         h, w = frame.shape[:2]
+        self.last_frame_at = time.time()
         with self.new_frame:
             self.jpeg = buf.tobytes()
             self.frame_id += 1
             self.stats = {"fps": round(fps, 1), "total": len(detections), "counts": counts,
-                          "error": None, "camera": s["camera"], "resolution": f"{w}x{h}"}
+                          "error": None, "camera": s["camera"], "resolution": f"{w}x{h}",
+                          "on_road": on_road_count, "off_road": len(watched) - on_road_count}
             self.new_frame.notify_all()
 
     def frames(self):
@@ -293,7 +337,13 @@ def create_app(worker: CameraWorker, login: tuple[str, str] | None = None,
     def stats():
         with worker.new_frame:
             data = dict(worker.stats)
+        # A frozen or unplugged camera can block without any error - say so on the page.
+        stalled = time.time() - getattr(worker, "last_frame_at", time.time())
+        if not data.get("error") and stalled > STALL_SECONDS and not getattr(worker, "scanning", False):
+            data["error"] = (f"No picture from camera {worker.get_settings()['camera']} for {stalled:.0f}s - "
+                             "unplug and replug the camera, then press Rescan")
         data["events"] = list(worker.events)
+        data["boot"] = BOOT_ID
         data["settings"] = s = worker.get_settings()
         data["alert_labels"] = sorted(worker.alerter.labels) if worker.alerter else []
         data["voice_labels"] = sorted(worker.voice.labels) if worker.voice else []
@@ -303,6 +353,9 @@ def create_app(worker: CameraWorker, login: tuple[str, str] | None = None,
         )
         data["telegram"] = worker.alerter is not None
         data["voice_available"] = bool(worker.voice and worker.voice.available)
+        data["road_available"] = getattr(worker, "road", None) is not None
+        light = getattr(worker, "light", None)
+        data["light"] = light.status() if light else None
         return jsonify(data)
 
     @app.get("/api/objects")
@@ -318,6 +371,14 @@ def create_app(worker: CameraWorker, login: tuple[str, str] | None = None,
             return jsonify({"ok": False, "error": "voice not available"}), 400
         worker.voice.lang = worker.get_settings()["lang"]
         worker.voice.test()
+        return jsonify({"ok": True})
+
+    @app.post("/api/light/test")
+    def light_test():
+        light = getattr(worker, "light", None)
+        if not (light and light.connected):
+            return jsonify({"ok": False, "error": "ESP32 not connected"}), 400
+        light.test(5)
         return jsonify({"ok": True})
 
     @app.post("/api/telegram/photo")
@@ -351,6 +412,12 @@ def create_app(worker: CameraWorker, login: tuple[str, str] | None = None,
                 changes["voice"] = bool(body["voice"])
             if "clip" in body:
                 changes["clip"] = bool(body["clip"])
+            if "road" in body and getattr(worker, "road", None):
+                changes["road"] = bool(body["road"])
+            if "show_road" in body:
+                changes["show_road"] = bool(body["show_road"])
+            if "light" in body and getattr(worker, "light", None):
+                changes["light"] = bool(body["light"])
             label_values = None
             if "detection_labels" in body:
                 label_values = body["detection_labels"]
@@ -398,6 +465,22 @@ def main():
     p.add_argument("--voice", help="add objects to the shared selection and enable voice alerts")
     p.add_argument("--voice-cooldown", type=float, default=10,
                    help="seconds before speaking again for the same object (default 10)")
+    p.add_argument("--no-road", action="store_true",
+                   help="alert wherever the object is (default: only when it is on the road)")
+    p.add_argument("--road-max-colour", type=int, default=RoadSettings.max_colour,
+                   help="road colour test: max colour 0-255, 0 = pure grey (higher = accept more tinted road)")
+    p.add_argument("--road-ratio", type=float, default=RoadSettings.max_ratio,
+                   help="road colour test: max colour as a share of brightness (higher = accept more tinted road)")
+    p.add_argument("--road-min-bright", type=int, default=RoadSettings.min_brightness, help="road colour test: min brightness 0-255")
+    p.add_argument("--road-max-bright", type=int, default=RoadSettings.max_brightness, help="road colour test: max brightness 0-255")
+    p.add_argument("--road-share", type=float, default=RoadSettings.min_share,
+                   help="share of road around the feet needed to count as on the road (default 0.30)")
+    p.add_argument("--esp-port", default="auto",
+                   help="ESP32 serial port, 'auto' to find it, or 'none' to switch the light off")
+    p.add_argument("--light-hold", type=float, default=3,
+                   help="seconds the light keeps blinking after the object leaves the road (default 3)")
+    p.add_argument("--treat-as", default="dog=cow",
+                   help="count one object as another, e.g. 'dog=cow' (default) or 'dog=cow,horse=cow'; '' = off")
     p.add_argument("--no-bot", action="store_true", help="do not listen for Telegram commands")
     p.add_argument("--no-login", action="store_true", help="open the page without a password")
     p.add_argument("--port", type=int, default=8000)
@@ -406,7 +489,7 @@ def main():
     args = p.parse_args()
 
     print(f"Loading model {args.model} ...")
-    detector = ObjectDetector(args.model, args.conf, args.device)
+    detector = ObjectDetector(args.model, args.conf, args.device, aliases=parse_aliases(args.treat_as))
     print(f"Model knows {len(detector.labels)} objects")
 
     # Telegram + voice are always prepared, so they can be switched on from the web page later.
@@ -438,9 +521,17 @@ def main():
         secret_key = secrets.token_hex(32)
         save_env_value("FLASK_SECRET_KEY", secret_key)  # keeps you logged in after a restart
 
+    road = None
+    if not args.no_road:
+        road = RoadChecker(RoadSettings(max_colour=args.road_max_colour, max_ratio=args.road_ratio,
+                                        min_brightness=args.road_min_bright,
+                                        max_brightness=args.road_max_bright, min_share=args.road_share))
+        print("Road rule on: chosen objects only trigger when they are on the road")
+    light = None if args.esp_port.lower() == "none" else EspLight(args.esp_port, args.light_hold)
+
     worker = CameraWorker(detector, args.camera, args.width, args.height, args.lang, args.text_size,
                           alerter, voice, alerts_on=bool(alert_labels), voice_on=bool(voice_labels),
-                          clip_seconds=args.clip_seconds)
+                          clip_seconds=args.clip_seconds, road=road, light=light)
     app = create_app(worker, login, secret_key)
     if client and not args.no_bot:
         TelegramBot(client, worker).start()

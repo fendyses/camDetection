@@ -16,7 +16,7 @@ from datetime import datetime
 import cv2
 
 from cam_detection.camera import open_camera
-from cam_detection.detector import ObjectDetector, draw_detections
+from cam_detection.detector import ObjectDetector, draw_detections, parse_aliases
 from cam_detection.telegram_alert import TelegramAlerter, parse_labels
 from cam_detection.voice import VoiceAnnouncer
 from cam_detection.translations import translate, ui
@@ -49,7 +49,7 @@ def main():
     source = args.source if args.source else args.camera
 
     print(f"Loading model {args.model} ...")
-    detector = ObjectDetector(args.model, args.conf, args.device)
+    detector = ObjectDetector(args.model, args.conf, args.device, aliases=parse_aliases("dog=cow"))
     print(f"Model knows {len(detector.labels)} objects")
 
     alerter = None
